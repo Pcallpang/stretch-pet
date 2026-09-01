@@ -1,0 +1,21 @@
+{
+  "name": "stretch-pet",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json",
+    "start": "npm run build && electron .",
+    "test": "vitest run",
+    "slice-sprites": "node scripts/slice-sprites.mjs"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "jimp": "^0.22.12"
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0"
+  }
+}
