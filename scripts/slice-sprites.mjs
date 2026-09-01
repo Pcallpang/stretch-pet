@@ -56,19 +56,73 @@ const CHECKER_CHANNEL_TOLERANCE = 6;
 // The reference sheet has no real alpha channel — the checkerboard "transparency"
 // preview is baked in as flat grayscale pixels. Chroma-key those out to real alpha
 // so autocrop (and the final sprites) are actually transparent.
+//
+// This is a flood-fill (connected-component) chroma key, not a global color-band
+// threshold: it only clears alpha for gray-band pixels that are reachable, via a
+// 4-connected walk through other gray-band pixels, from a seed point on the image's
+// outer border (which is guaranteed to be checkerboard background — the character
+// never touches the sheet edge). A gray-ish pixel that happens to sit inside the
+// character's silhouette (e.g. a shadow tone that falls in the same band as the
+// background) is never touched unless it is actually connected to the background
+// region, and a background fleck just outside the band is still reached and cleared
+// as long as it is enclosed by connected in-band neighbors on its way from an edge
+// seed. This avoids the false-positive/false-negative edge speckle a purely global
+// threshold produces at antialiased aura edges.
+function isCheckerGray(data, idx) {
+  const r = data[idx];
+  const g = data[idx + 1];
+  const b = data[idx + 2];
+  const isGray =
+    Math.abs(r - g) < CHECKER_CHANNEL_TOLERANCE &&
+    Math.abs(g - b) < CHECKER_CHANNEL_TOLERANCE &&
+    Math.abs(r - b) < CHECKER_CHANNEL_TOLERANCE;
+  return isGray && r >= CHECKER_GRAY_MIN && r <= CHECKER_GRAY_MAX;
+}
+
 function removeCheckerboard(image) {
-  image.scan(0, 0, image.bitmap.width, image.bitmap.height, (x, y, idx) => {
-    const r = image.bitmap.data[idx];
-    const g = image.bitmap.data[idx + 1];
-    const b = image.bitmap.data[idx + 2];
-    const isGray =
-      Math.abs(r - g) < CHECKER_CHANNEL_TOLERANCE &&
-      Math.abs(g - b) < CHECKER_CHANNEL_TOLERANCE &&
-      Math.abs(r - b) < CHECKER_CHANNEL_TOLERANCE;
-    if (isGray && r >= CHECKER_GRAY_MIN && r <= CHECKER_GRAY_MAX) {
-      image.bitmap.data[idx + 3] = 0;
+  const { width, height, data } = image.bitmap;
+  const visited = new Uint8Array(width * height);
+  // Queue of pixel indices (x + y*width) to visit. Typed array used as a ring-free
+  // growable stack (BFS order doesn't matter for correctness here).
+  const queue = new Int32Array(width * height);
+  let queueLen = 0;
+
+  const trySeed = (x, y) => {
+    const px = y * width + x;
+    if (visited[px]) return;
+    const idx = px * 4;
+    if (isCheckerGray(data, idx)) {
+      visited[px] = 1;
+      queue[queueLen++] = px;
     }
-  });
+  };
+
+  // Seed from every pixel on the four outer edges — guaranteed background, since
+  // the character/aura art never touches the sheet's border.
+  for (let x = 0; x < width; x++) {
+    trySeed(x, 0);
+    trySeed(x, height - 1);
+  }
+  for (let y = 0; y < height; y++) {
+    trySeed(0, y);
+    trySeed(width - 1, y);
+  }
+
+  let head = 0;
+  while (head < queueLen) {
+    const px = queue[head++];
+    const x = px % width;
+    const y = (px / width) | 0;
+    const idx = px * 4;
+    data[idx + 3] = 0; // clear alpha for this confirmed background pixel
+
+    // 4-connected neighbors
+    if (x > 0) trySeed(x - 1, y);
+    if (x < width - 1) trySeed(x + 1, y);
+    if (y > 0) trySeed(x, y - 1);
+    if (y < height - 1) trySeed(x, y + 1);
+  }
+
   return image;
 }
 
