@@ -53,6 +53,29 @@ const CHECKER_GRAY_MIN = 130;
 const CHECKER_GRAY_MAX = 220;
 const CHECKER_CHANNEL_TOLERANCE = 6;
 
+// Second, looser threshold used ONLY to decide whether the flood-fill may
+// *traverse through* a pixel — it never by itself causes a pixel to be cleared.
+// The purple "aura" glow around each character is a gradient that blends from
+// checkerboard gray into purple; a lot of that gradient's midtones fall outside
+// isCheckerGray's tight tolerance (they're gray-ish but not gray enough, or have
+// a slight purple tint), which made that gradient ring an impassable wall for a
+// single-threshold BFS: any background patch beyond the ring (farther from the
+// character than the aura) is genuinely connected to the border in the source
+// image, but the walk could never reach it once it hit the ring, so it was left
+// fully opaque as a visible gray rectangle in every output frame.
+//
+// This is the "hysteresis" trick from Canny edge detection's double threshold:
+// use a wide, permissive test to decide connectivity/traversal, but a narrow,
+// strict test to decide what actually gets an alpha of 0. That lets the search
+// walk *across* the thin aura gradient (which passes the loose test even where
+// it fails the strict one) to reach real background on the far side, while still
+// only ever clearing pixels that are unambiguously checkerboard gray — character
+// interior pixels (which are neither near-gray nor low-saturation) still can't
+// be reached or cleared.
+const CHECKER_LOOSE_GRAY_MIN = 90;
+const CHECKER_LOOSE_GRAY_MAX = 235;
+const CHECKER_LOOSE_MAX_SATURATION = 40; // max channel spread (max-min) to count as "near-gray"
+
 // The reference sheet has no real alpha channel — the checkerboard "transparency"
 // preview is baked in as flat grayscale pixels. Chroma-key those out to real alpha
 // so autocrop (and the final sprites) are actually transparent.
@@ -79,6 +102,25 @@ function isCheckerGray(data, idx) {
   return isGray && r >= CHECKER_GRAY_MIN && r <= CHECKER_GRAY_MAX;
 }
 
+// Loose "may traverse" test — see comment above CHECKER_LOOSE_* constants.
+// Deliberately does not require the pixel to actually be cleared; it only has to
+// look plausibly like part of the gray->purple aura gradient or dim background,
+// so the BFS can step across the aura ring without ever marking those pixels
+// themselves as background.
+function isCheckerGrayLoose(data, idx) {
+  const r = data[idx];
+  const g = data[idx + 1];
+  const b = data[idx + 2];
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const saturation = max - min;
+  return (
+    saturation <= CHECKER_LOOSE_MAX_SATURATION &&
+    max >= CHECKER_LOOSE_GRAY_MIN &&
+    max <= CHECKER_LOOSE_GRAY_MAX
+  );
+}
+
 function removeCheckerboard(image) {
   const { width, height, data } = image.bitmap;
   const visited = new Uint8Array(width * height);
@@ -91,7 +133,10 @@ function removeCheckerboard(image) {
     const px = y * width + x;
     if (visited[px]) return;
     const idx = px * 4;
-    if (isCheckerGray(data, idx)) {
+    // Traversal uses the loose test so the walk can cross the aura's gradient
+    // ring; only pixels that also pass the strict test get their alpha cleared
+    // (see removeCheckerboard's main loop below).
+    if (isCheckerGrayLoose(data, idx)) {
       visited[px] = 1;
       queue[queueLen++] = px;
     }
@@ -114,7 +159,14 @@ function removeCheckerboard(image) {
     const x = px % width;
     const y = (px / width) | 0;
     const idx = px * 4;
-    data[idx + 3] = 0; // clear alpha for this confirmed background pixel
+    // Only clear alpha for pixels that pass the STRICT test — the loose test
+    // only earned this pixel a place in the walk, not automatic clearing. This
+    // guarantees the aura gradient itself (which is often loose-only) stays
+    // opaque, and genuine character-interior pixels are never cleared even if a
+    // traversal path happened to reach adjacent to them.
+    if (isCheckerGray(data, idx)) {
+      data[idx + 3] = 0;
+    }
 
     // 4-connected neighbors
     if (x > 0) trySeed(x - 1, y);
