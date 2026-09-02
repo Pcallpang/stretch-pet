@@ -24,7 +24,10 @@ function rebuildMenu(callbacks: TrayCallbacks): void {
 
   const menu = Menu.buildFromTemplate([
     {
-      label: `현재: 집중 ${settings.focusMinutes}분 / 스트레칭 ${settings.stretchMinutes}분`,
+      // stretchMinutes is persisted but doesn't actually drive stretch
+      // duration (that's the fixed sum of STRETCH_STEPS in renderer.ts) —
+      // don't advertise a number the app doesn't act on.
+      label: `현재: 집중 ${settings.focusMinutes}분`,
       enabled: false,
     },
     { type: 'separator' },
