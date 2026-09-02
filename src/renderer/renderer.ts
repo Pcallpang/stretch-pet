@@ -41,7 +41,9 @@ let walkInterval: ReturnType<typeof setInterval> | null = null;
 let countdownInterval: ReturnType<typeof setInterval> | null = null;
 
 function fire(event: PetEvent): void {
-  state = transition(state, event);
+  const next = transition(state, event);
+  if (next === state) return;
+  state = next;
   onStateEnter(state);
 }
 
@@ -54,10 +56,12 @@ function onStateEnter(next: PetState): void {
   if (next === 'idle') {
     hideBubble();
     idleAnimator.start();
+    window.petAPI.setIgnoreMouseEvents(true);
   } else if (next === 'walk') {
     hideBubble();
     walkAnimator.start();
     walkInterval = setInterval(stepWalk, 50);
+    window.petAPI.setIgnoreMouseEvents(true);
   } else if (next === 'alert') {
     const maxX = window.innerWidth - petEl.clientWidth;
     petX = Math.floor(maxX / 2);
@@ -155,9 +159,13 @@ skipButton.addEventListener('click', () => {
 
 petEl.addEventListener('mouseenter', () => window.petAPI.setIgnoreMouseEvents(false));
 petEl.addEventListener('mouseleave', () => {
-  if (state === 'idle' || state === 'walk') {
-    window.petAPI.setIgnoreMouseEvents(true);
-  }
+  // Always re-enable click-through on leave, regardless of state (e.g.
+  // leaving during 'alert' without clicking). idle/walk entry also
+  // re-asserts this as a safety net, but this must not be gated on state
+  // here — a state-scoped guard is exactly what left the whole desktop
+  // permanently non-click-through when the pet was hovered-then-left
+  // during 'alert' or 'stretch'.
+  window.petAPI.setIgnoreMouseEvents(true);
 });
 
 // Same hover-scoped enable/disable pattern as the pet itself, so the user

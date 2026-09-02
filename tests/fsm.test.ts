@@ -31,6 +31,10 @@ describe('transition', () => {
     expect(transition('walk', 'wander_pause')).toBe('idle');
   });
 
+  it('alert -> idle on alert_timeout', () => {
+    expect(transition('alert', 'alert_timeout')).toBe('idle');
+  });
+
   it('ignores an event that has no transition for the current state', () => {
     expect(transition('idle', 'stretch_complete')).toBe('idle');
   });
