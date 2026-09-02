@@ -1,10 +1,12 @@
-import { app, BrowserWindow, screen, ipcMain } from 'electron';
+import { app, BrowserWindow, screen, ipcMain, Menu } from 'electron';
 import * as path from 'path';
 import { TimerScheduler, minutesToMs } from './timerScheduler';
-import { getSettings } from './settings';
-import { createTray } from './tray';
+import { getSettings, setSettings } from './settings';
+import { createTray, refreshTray } from './tray';
 
 const COOLDOWN_MINUTES = 2;
+const MIN_FOCUS_MINUTES = 5;
+const MAX_FOCUS_MINUTES = 180;
 // How long an ALERT notification waits for the user before we assume they're
 // away and quietly return the pet to idle/walk + resume the focus timer,
 // instead of leaving the window stuck ignoring mouse events forever.
@@ -98,6 +100,40 @@ app.whenReady().then(() => {
 
 ipcMain.on('set-ignore-mouse-events', (_event, ignore: boolean) => {
   mainWindow?.setIgnoreMouseEvents(ignore, { forward: true });
+});
+
+ipcMain.on('show-pet-context-menu', () => {
+  const menu = Menu.buildFromTemplate([
+    {
+      label: '지금 스트레칭 하기',
+      click: () => {
+        // Cancel whatever the normal focus/alert cycle was waiting on — the
+        // manual stretch takes over, and the usual stretch-complete/skip
+        // handlers below already reschedule the focus timer for the
+        // configured interval, counting from when this stretch finishes.
+        focusTimer.cancel();
+        alertTimer.cancel();
+        mainWindow?.webContents.send('force-stretch');
+      },
+    },
+    {
+      label: '스트레칭 시간 설정',
+      click: () => {
+        mainWindow?.webContents.send('show-settings-panel', getSettings().focusMinutes);
+      },
+    },
+  ]);
+  if (mainWindow) menu.popup({ window: mainWindow });
+});
+
+ipcMain.on('set-focus-minutes', (_event, minutes: number) => {
+  const clamped = Math.min(MAX_FOCUS_MINUTES, Math.max(MIN_FOCUS_MINUTES, Math.round(minutes)));
+  setSettings({ focusMinutes: clamped });
+  refreshTray();
+  // The new interval takes effect immediately: the next automatic stretch
+  // fires this many minutes from now, not from whenever the old timer was
+  // going to fire.
+  scheduleFocusTimer();
 });
 
 ipcMain.on('stretch-started', () => {

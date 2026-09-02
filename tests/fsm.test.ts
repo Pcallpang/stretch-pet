@@ -38,4 +38,15 @@ describe('transition', () => {
   it('ignores an event that has no transition for the current state', () => {
     expect(transition('idle', 'stretch_complete')).toBe('idle');
   });
+
+  it('force_start_stretch jumps straight to stretch from idle, walk, alert, or cooldown', () => {
+    expect(transition('idle', 'force_start_stretch')).toBe('stretch');
+    expect(transition('walk', 'force_start_stretch')).toBe('stretch');
+    expect(transition('alert', 'force_start_stretch')).toBe('stretch');
+    expect(transition('cooldown', 'force_start_stretch')).toBe('stretch');
+  });
+
+  it('force_start_stretch has no effect while already stretching', () => {
+    expect(transition('stretch', 'force_start_stretch')).toBe('stretch');
+  });
 });

@@ -7,6 +7,7 @@ interface TrayCallbacks {
 }
 
 let tray: Tray | null = null;
+let lastCallbacks: TrayCallbacks | null = null;
 
 export function createTray(callbacks: TrayCallbacks): Tray {
   const icon = nativeImage.createFromPath(
@@ -14,8 +15,18 @@ export function createTray(callbacks: TrayCallbacks): Tray {
   );
   tray = new Tray(icon.resize({ width: 16, height: 16 }));
   tray.setToolTip('스트레칭펫');
+  lastCallbacks = callbacks;
   rebuildMenu(callbacks);
   return tray;
+}
+
+// Lets other entry points (e.g. the pet's own right-click menu) that changed
+// settings outside the tray's own radio items make the tray label/checks
+// reflect the new values, without duplicating the menu-building logic.
+export function refreshTray(): void {
+  if (tray && lastCallbacks) {
+    rebuildMenu(lastCallbacks);
+  }
 }
 
 function rebuildMenu(callbacks: TrayCallbacks): void {

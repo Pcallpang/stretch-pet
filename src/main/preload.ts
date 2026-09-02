@@ -23,4 +23,16 @@ contextBridge.exposeInMainWorld('petAPI', {
     ipcRenderer.send('stretch-started');
   },
   getSettings: (): Promise<unknown> => ipcRenderer.invoke('get-settings'),
+  showPetContextMenu: (): void => {
+    ipcRenderer.send('show-pet-context-menu');
+  },
+  onForceStretch: (callback: () => void): void => {
+    ipcRenderer.on('force-stretch', () => callback());
+  },
+  onShowSettingsPanel: (callback: (focusMinutes: number) => void): void => {
+    ipcRenderer.on('show-settings-panel', (_event, focusMinutes: number) => callback(focusMinutes));
+  },
+  setFocusMinutes: (minutes: number): void => {
+    ipcRenderer.send('set-focus-minutes', minutes);
+  },
 });

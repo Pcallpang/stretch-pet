@@ -33,6 +33,10 @@ const panelEl = document.getElementById('stretch-panel') as HTMLDivElement;
 const nameEl = document.getElementById('stretch-name') as HTMLDivElement;
 const countdownEl = document.getElementById('stretch-countdown') as HTMLDivElement;
 const skipButton = document.getElementById('stretch-skip') as HTMLButtonElement;
+const settingsPanelEl = document.getElementById('settings-panel') as HTMLDivElement;
+const settingsMinutesInput = document.getElementById('settings-minutes-input') as HTMLInputElement;
+const settingsConfirmButton = document.getElementById('settings-confirm') as HTMLButtonElement;
+const settingsCancelButton = document.getElementById('settings-cancel') as HTMLButtonElement;
 
 const idleAnimator = new SpriteAnimator(IDLE_FRAMES, 1, (src) => { petEl.src = src; });
 const walkAnimator = new SpriteAnimator(WALK_FRAMES, 6, (src) => { petEl.src = src; });
@@ -52,6 +56,10 @@ function onStateEnter(next: PetState): void {
   walkAnimator.stop();
   if (walkInterval) { clearInterval(walkInterval); walkInterval = null; }
   if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+  // A state change (including a manually-triggered "지금 스트레칭 하기") always
+  // supersedes an open settings panel, so it never lingers on top of the
+  // stretch UI or a walking pet.
+  hideSettingsPanel();
 
   if (next === 'idle') {
     hideBubble();
@@ -114,6 +122,16 @@ function hideBubble(): void {
 
 function hidePanel(): void {
   panelEl.classList.add('hidden');
+}
+
+function showSettingsPanel(currentFocusMinutes: number): void {
+  settingsMinutesInput.value = String(currentFocusMinutes);
+  settingsPanelEl.classList.remove('hidden');
+  trackPetX(settingsPanelEl, -40);
+}
+
+function hideSettingsPanel(): void {
+  settingsPanelEl.classList.add('hidden');
 }
 
 function runStretchStep(): void {
@@ -184,9 +202,31 @@ petEl.addEventListener('click', () => {
   }
 });
 
+petEl.addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+  window.petAPI.showPetContextMenu();
+});
+
+settingsPanelEl.addEventListener('mouseenter', () => window.petAPI.setIgnoreMouseEvents(false));
+settingsPanelEl.addEventListener('mouseleave', () => window.petAPI.setIgnoreMouseEvents(true));
+
+settingsConfirmButton.addEventListener('click', () => {
+  const minutes = Number(settingsMinutesInput.value);
+  if (Number.isFinite(minutes) && minutes > 0) {
+    window.petAPI.setFocusMinutes(minutes);
+  }
+  hideSettingsPanel();
+});
+
+settingsCancelButton.addEventListener('click', () => {
+  hideSettingsPanel();
+});
+
 window.petAPI.onTimerElapsed(() => fire('timer_elapsed'));
 window.petAPI.onCooldownElapsed(() => fire('cooldown_elapsed'));
 window.petAPI.onAlertTimeout(() => fire('alert_timeout'));
+window.petAPI.onForceStretch(() => fire('force_start_stretch'));
+window.petAPI.onShowSettingsPanel((focusMinutes) => showSettingsPanel(focusMinutes));
 
 setInterval(() => {
   if (state === 'idle') fire('wander_start');

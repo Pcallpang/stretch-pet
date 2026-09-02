@@ -16,6 +16,10 @@ declare global {
       notifyStretchSkip(): void;
       notifyStretchStart(): void;
       getSettings(): Promise<PetSettings>;
+      showPetContextMenu(): void;
+      onForceStretch(callback: () => void): void;
+      onShowSettingsPanel(callback: (focusMinutes: number) => void): void;
+      setFocusMinutes(minutes: number): void;
     };
   }
 }
