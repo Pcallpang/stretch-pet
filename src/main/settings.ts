@@ -40,11 +40,26 @@ function getStore(): Store<PetSettings> {
 }
 
 export function getSettings(): PetSettings {
-  return clampSettings(getStore().store);
+  try {
+    return clampSettings(getStore().store);
+  } catch (err) {
+    console.error('Failed to read settings store, falling back to defaults:', err);
+    return clampSettings({});
+  }
 }
 
 export function setSettings(partial: Partial<PetSettings>): PetSettings {
-  const merged = clampSettings({ ...getStore().store, ...partial });
-  getStore().set(merged);
+  let current: Partial<PetSettings> = {};
+  try {
+    current = getStore().store;
+  } catch (err) {
+    console.error('Failed to read settings store while writing, falling back to defaults:', err);
+  }
+  const merged = clampSettings({ ...current, ...partial });
+  try {
+    getStore().set(merged);
+  } catch (err) {
+    console.error('Failed to persist settings:', err);
+  }
   return merged;
 }
