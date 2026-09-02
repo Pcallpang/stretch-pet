@@ -122,6 +122,8 @@ ipcMain.on('show-pet-context-menu', () => {
         mainWindow?.webContents.send('show-settings-panel', getSettings().focusMinutes);
       },
     },
+    { type: 'separator' },
+    { label: '종료', click: () => app.quit() },
   ]);
   if (mainWindow) menu.popup({ window: mainWindow });
 });

@@ -267,6 +267,15 @@ petEl.addEventListener('mouseleave', () => {
 // regardless of where the cursor physically is, which is exactly what a
 // drag needs.
 petEl.addEventListener('pointerdown', (event) => {
+  // Only the primary (left) button starts a drag. The right button also
+  // fires 'pointerdown' just before the 'contextmenu' event that opens the
+  // right-click menu — without this check, right-clicking left the drag
+  // "stuck on" (pointer capture set, isDragging never cleared, since the
+  // native context menu swallows the matching pointerup), so any mouse
+  // movement afterward — even with no button held — kept yanking the pet to
+  // the cursor, which is what looked like the pet auto-grabbing/releasing
+  // and "teleporting" all over the screen.
+  if (event.button !== 0) return;
   isDragging = true;
   wasDragged = false;
   dragStartMouseX = event.clientX;
@@ -275,6 +284,13 @@ petEl.addEventListener('pointerdown', (event) => {
   dragStartPetY = petY;
   petEl.classList.add('dragging');
   petEl.setPointerCapture(event.pointerId);
+});
+
+petEl.addEventListener('pointercancel', () => {
+  // Defensive reset: if capture is lost some other way (e.g. focus moving
+  // to a native menu/dialog mid-drag), don't leave isDragging stuck true.
+  isDragging = false;
+  petEl.classList.remove('dragging');
 });
 
 petEl.addEventListener('pointermove', (event) => {
