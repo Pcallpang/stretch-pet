@@ -175,25 +175,6 @@ function removeCheckerboard(image) {
     if (y < height - 1) trySeed(x, y + 1);
   }
 
-  // Final global cleanup pass: the BFS above only clears pixels it can reach
-  // by traversing the loose ("may cross") test from a border seed, and the
-  // purple aura's saturated core blocks that traversal in places — leaving a
-  // few percent of checker-gray pixels stranded (still fully opaque) deep
-  // inside the aura ring, even though they'd pass the STRICT test on their
-  // own. Since the strict test is tight (near-gray AND in the checker-gray
-  // band), it's safe to apply it globally regardless of connectivity here:
-  // per the tolerances above, the character body is far darker than the
-  // checker-gray band and the aura itself is far more saturated than the
-  // strict test's channel tolerance, so this pass can't false-positive on
-  // real art — it only mops up checker-gray speckle the flood-fill couldn't
-  // reach.
-  for (let px = 0; px < width * height; px++) {
-    const idx = px * 4;
-    if (isCheckerGray(data, idx)) {
-      data[idx + 3] = 0;
-    }
-  }
-
   return image;
 }
 
