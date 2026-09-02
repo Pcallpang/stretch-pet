@@ -14,6 +14,12 @@ html, body {
   height: 96px;
   cursor: grab;
   object-fit: contain;
+  /* Suppress the browser's built-in "drag this image out" behavior, which
+     was fighting our own pointer-capture-based drag: the image would move a
+     few pixels under our JS, then the native image-drag would take over and
+     show a "can't drop here" cursor and freeze it. */
+  -webkit-user-drag: none;
+  user-drag: none;
 }
 
 #pet.dragging {

@@ -276,6 +276,7 @@ petEl.addEventListener('pointerdown', (event) => {
   // the cursor, which is what looked like the pet auto-grabbing/releasing
   // and "teleporting" all over the screen.
   if (event.button !== 0) return;
+  event.preventDefault(); // belt-and-suspenders against the native image drag (see 'dragstart' below and the CSS user-drag:none)
   isDragging = true;
   wasDragged = false;
   dragStartMouseX = event.clientX;
@@ -285,6 +286,8 @@ petEl.addEventListener('pointerdown', (event) => {
   petEl.classList.add('dragging');
   petEl.setPointerCapture(event.pointerId);
 });
+
+petEl.addEventListener('dragstart', (event) => event.preventDefault());
 
 petEl.addEventListener('pointercancel', () => {
   // Defensive reset: if capture is lost some other way (e.g. focus moving
