@@ -175,24 +175,75 @@ function removeCheckerboard(image) {
     if (y < height - 1) trySeed(x, y + 1);
   }
 
+  // Final global cleanup pass: the BFS above only clears pixels it can reach
+  // by traversing the loose ("may cross") test from a border seed, and the
+  // purple aura's saturated core blocks that traversal in places — leaving a
+  // few percent of checker-gray pixels stranded (still fully opaque) deep
+  // inside the aura ring, even though they'd pass the STRICT test on their
+  // own. Since the strict test is tight (near-gray AND in the checker-gray
+  // band), it's safe to apply it globally regardless of connectivity here:
+  // per the tolerances above, the character body is far darker than the
+  // checker-gray band and the aura itself is far more saturated than the
+  // strict test's channel tolerance, so this pass can't false-positive on
+  // real art — it only mops up checker-gray speckle the flood-fill couldn't
+  // reach.
+  for (let px = 0; px < width * height; px++) {
+    const idx = px * 4;
+    if (isCheckerGray(data, idx)) {
+      data[idx + 3] = 0;
+    }
+  }
+
   return image;
 }
 
-async function sliceRow(image, rowIndex, colCount, names, outSubdir) {
+// Pads every frame in `frames` (already autocropped Jimp images) to a shared
+// canvas size — the max width/height across the group — centering each
+// tighter crop within it. This keeps frames within the same animation loop
+// (e.g. all idle frames, all walk frames) at consistent dimensions so the
+// loop doesn't visibly "pop"/squash when the fixed-size <img> CSS box scales
+// each frame independently. Frames are not cropped further, only padded, so
+// no art is lost.
+function padGroupToCommonSize(frames) {
+  const maxWidth = Math.max(...frames.map((f) => f.bitmap.width));
+  const maxHeight = Math.max(...frames.map((f) => f.bitmap.height));
+  return frames.map((frame) => {
+    const canvas = new Jimp(maxWidth, maxHeight, 0x00000000);
+    const x = Math.floor((maxWidth - frame.bitmap.width) / 2);
+    const y = Math.floor((maxHeight - frame.bitmap.height) / 2);
+    canvas.composite(frame, x, y);
+    return canvas;
+  });
+}
+
+// `groupPad`: when true, all frames sliced by this call are padded to a
+// shared canvas size after autocropping (see padGroupToCommonSize) — used
+// for idle/walk, which loop and need consistent dimensions frame-to-frame.
+// Stretch frames pass groupPad=false since each pose is shown standalone,
+// not as part of a looping cycle, so independent tight crops are fine.
+async function sliceRow(image, rowIndex, colCount, names, outSubdir, groupPad) {
   const colWidth = colCount === 5 ? COL_WIDTH_5 : COL_WIDTH_4;
   const rowTop = ROW_BOUNDS[rowIndex];
   const rowHeight = ROW_BOUNDS[rowIndex + 1] - rowTop;
   fs.mkdirSync(path.join(OUT_DIR, outSubdir), { recursive: true });
 
-  for (let i = 0; i < names.length; i++) {
+  let cells = names.map((_, i) => {
     const x = i * colWidth;
     const skip = LABEL_SKIP[rowIndex][i];
     const y = rowTop + skip;
     const height = rowHeight - skip;
     const cell = image.clone().crop(x, y, colWidth, height);
     cell.autocrop({ cropOnlyFrames: false, tolerance: 0.02 });
+    return cell;
+  });
+
+  if (groupPad) {
+    cells = padGroupToCommonSize(cells);
+  }
+
+  for (let i = 0; i < names.length; i++) {
     const outPath = path.join(OUT_DIR, outSubdir, `${names[i]}.png`);
-    await cell.writeAsync(outPath);
+    await cells[i].writeAsync(outPath);
     console.log('wrote', outPath);
   }
 }
@@ -202,14 +253,15 @@ async function main() {
   removeCheckerboard(image);
   // Row 0 (IDLE/STRETCH header): only the first 2 columns are distinct poses,
   // columns 3-4 duplicate column 1 in the reference sheet — skip them.
-  await sliceRow(image, 0, 2, ['1', '2'], 'idle');
-  await sliceRow(image, 1, 5, ['1', '2', '3', '4', '5'], 'walk');
+  await sliceRow(image, 0, 2, ['1', '2'], 'idle', true);
+  await sliceRow(image, 1, 5, ['1', '2', '3', '4', '5'], 'walk', true);
   await sliceRow(
     image,
     2,
     4,
     ['start', 'neck_tilt', 'shoulder_roll', 'torso_twist'],
     'stretch',
+    false,
   );
   await sliceRow(
     image,
@@ -217,6 +269,7 @@ async function main() {
     4,
     ['hip_glute', 'leg_extension', 'spinal_twist', 'deep_breath'],
     'stretch',
+    false,
   );
 }
 
