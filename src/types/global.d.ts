@@ -11,8 +11,10 @@ declare global {
       setIgnoreMouseEvents(ignore: boolean): void;
       onTimerElapsed(callback: () => void): void;
       onCooldownElapsed(callback: () => void): void;
+      onAlertTimeout(callback: () => void): void;
       notifyStretchComplete(): void;
       notifyStretchSkip(): void;
+      notifyStretchStart(): void;
       getSettings(): Promise<PetSettings>;
     };
   }

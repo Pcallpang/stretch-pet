@@ -64,10 +64,14 @@ function onStateEnter(next: PetState): void {
     petEl.style.left = `${petX}px`;
     idleAnimator.start();
     showBubble(pickDialogue('alert_start'));
-    window.petAPI.setIgnoreMouseEvents(false);
+    // Window stays click-through by default (see the top-level
+    // setIgnoreMouseEvents(true) call and the pet's hover handlers below) —
+    // only hovering the character itself (or the stretch panel once it's
+    // shown) should re-enable mouse events, never the whole alert state.
   } else if (next === 'stretch') {
     stretchStepIndex = 0;
     panelEl.classList.remove('hidden');
+    window.petAPI.notifyStretchStart();
     runStretchStep();
   } else if (next === 'cooldown') {
     hidePanel();
@@ -138,6 +142,16 @@ petEl.addEventListener('mouseleave', () => {
   }
 });
 
+// Same hover-scoped enable/disable pattern as the pet itself, so the user
+// can click the skip button / interact with the panel during 'stretch'
+// without the rest of the screen losing click-through.
+panelEl.addEventListener('mouseenter', () => window.petAPI.setIgnoreMouseEvents(false));
+panelEl.addEventListener('mouseleave', () => {
+  if (state === 'stretch') {
+    window.petAPI.setIgnoreMouseEvents(true);
+  }
+});
+
 petEl.addEventListener('click', () => {
   if (state === 'alert') {
     fire('user_start_stretch');
@@ -146,6 +160,7 @@ petEl.addEventListener('click', () => {
 
 window.petAPI.onTimerElapsed(() => fire('timer_elapsed'));
 window.petAPI.onCooldownElapsed(() => fire('cooldown_elapsed'));
+window.petAPI.onAlertTimeout(() => fire('alert_timeout'));
 
 setInterval(() => {
   if (state === 'idle') fire('wander_start');

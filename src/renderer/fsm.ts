@@ -7,12 +7,13 @@ export type PetEvent =
   | 'user_start_stretch'
   | 'stretch_complete'
   | 'stretch_skip'
-  | 'cooldown_elapsed';
+  | 'cooldown_elapsed'
+  | 'alert_timeout';
 
 const TRANSITIONS: Record<PetState, Partial<Record<PetEvent, PetState>>> = {
   idle: { wander_start: 'walk', timer_elapsed: 'alert' },
   walk: { wander_pause: 'idle', timer_elapsed: 'alert' },
-  alert: { user_start_stretch: 'stretch' },
+  alert: { user_start_stretch: 'stretch', alert_timeout: 'idle' },
   stretch: { stretch_complete: 'cooldown', stretch_skip: 'cooldown' },
   cooldown: { cooldown_elapsed: 'idle' },
 };

@@ -10,11 +10,17 @@ contextBridge.exposeInMainWorld('petAPI', {
   onCooldownElapsed: (callback: () => void): void => {
     ipcRenderer.on('cooldown-elapsed', () => callback());
   },
+  onAlertTimeout: (callback: () => void): void => {
+    ipcRenderer.on('alert-timeout', () => callback());
+  },
   notifyStretchComplete: (): void => {
     ipcRenderer.send('stretch-complete');
   },
   notifyStretchSkip: (): void => {
     ipcRenderer.send('stretch-skip');
+  },
+  notifyStretchStart: (): void => {
+    ipcRenderer.send('stretch-started');
   },
   getSettings: (): Promise<unknown> => ipcRenderer.invoke('get-settings'),
 });
