@@ -7,15 +7,35 @@
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json",
     "start": "npm run build && electron .",
     "test": "vitest run",
-    "slice-sprites": "node scripts/slice-sprites.mjs"
+    "slice-sprites": "node scripts/slice-sprites.mjs",
+    "package": "npm run build && electron-builder --win portable"
   },
   "devDependencies": {
     "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "jimp": "^0.22.12",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0",
-    "jimp": "^0.22.12"
+    "vitest": "^2.1.0"
   },
   "dependencies": {
     "electron-store": "^8.2.0"
+  },
+  "build": {
+    "appId": "com.pcallpang.stretchpet",
+    "productName": "StretchPet",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "src/renderer/index.html",
+      "src/renderer/style.css",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "build/icon.png"
+    }
   }
 }
