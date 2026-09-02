@@ -125,6 +125,10 @@ function onStateEnter(next: PetState): void {
     hidePanel();
     hideBubble();
     petEl.classList.remove('facing-left');
+    // Without this the pet sat as a frozen still frame for the whole
+    // 2-minute cooldown — it looked like it had stopped moving/wandering
+    // for good, not just resting between stretches.
+    idleAnimator.start();
     window.petAPI.setIgnoreMouseEvents(true);
   }
 }
@@ -172,7 +176,14 @@ function repositionVisibleOverlays(): void {
   if (!settingsPanelEl.classList.contains('hidden')) positionOverlay(settingsPanelEl, -40);
 }
 
+// Bumped on every showBubble() call so a delayed auto-hide (see the
+// next-stretch countdown bubble below) can tell whether it's still the
+// bubble it scheduled the hide for, or whether something newer (e.g. an
+// alert firing) has since taken over the bubble — and skip hiding if so.
+let bubbleToken = 0;
+
 function showBubble(text: string): void {
+  bubbleToken += 1;
   bubbleEl.textContent = text;
   bubbleEl.classList.remove('hidden');
   positionOverlay(bubbleEl, -20);
@@ -335,8 +346,24 @@ petEl.addEventListener('click', () => {
   }
   if (state === 'alert') {
     fire('user_start_stretch');
+  } else if (state === 'idle' || state === 'walk' || state === 'cooldown') {
+    showNextStretchCountdown();
   }
 });
+
+// A quick way to check "how long until the next stretch?" without waiting
+// for the alert — shows briefly, then auto-hides so it doesn't linger and
+// compete with the pet's normal wandering/speech bubble later.
+function showNextStretchCountdown(): void {
+  window.petAPI.getMinutesUntilNextStretch().then((minutes) => {
+    if (minutes === null) return; // state changed while the request was in flight
+    showBubble(minutes <= 0 ? '곧 스트레칭 시간이에요!' : `다음 스트레칭까지 ${minutes}분 남았어요.`);
+    const token = bubbleToken;
+    setTimeout(() => {
+      if (bubbleToken === token) hideBubble();
+    }, 4000);
+  });
+}
 
 petEl.addEventListener('contextmenu', (event) => {
   event.preventDefault();

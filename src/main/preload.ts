@@ -35,4 +35,6 @@ contextBridge.exposeInMainWorld('petAPI', {
   setFocusMinutes: (minutes: number): void => {
     ipcRenderer.send('set-focus-minutes', minutes);
   },
+  getMinutesUntilNextStretch: (): Promise<number | null> =>
+    ipcRenderer.invoke('get-minutes-until-next-stretch'),
 });

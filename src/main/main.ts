@@ -17,6 +17,14 @@ const focusTimer = new TimerScheduler();
 const cooldownTimer = new TimerScheduler();
 const alertTimer = new TimerScheduler();
 
+// Tracked so the renderer can ask "how many minutes until the next
+// stretch?" (shown in a speech bubble on click) without duplicating timer
+// state in two processes. Exactly one of these is non-null at a time, or
+// both are null during 'alert'/'stretch' when there's no next-stretch
+// countdown to show.
+let focusDeadline: number | null = null;
+let cooldownDeadline: number | null = null;
+
 function createWindow(): void {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   mainWindow = new BrowserWindow({
@@ -43,7 +51,11 @@ function createWindow(): void {
 
 function scheduleFocusTimer(): void {
   const { focusMinutes } = getSettings();
-  focusTimer.schedule(minutesToMs(focusMinutes), () => {
+  const ms = minutesToMs(focusMinutes);
+  focusDeadline = Date.now() + ms;
+  cooldownDeadline = null;
+  focusTimer.schedule(ms, () => {
+    focusDeadline = null;
     mainWindow?.webContents.send('timer-elapsed');
     scheduleAlertTimeout();
   });
@@ -60,7 +72,10 @@ function scheduleAlertTimeout(): void {
 }
 
 function scheduleCooldownTimer(): void {
-  cooldownTimer.schedule(minutesToMs(COOLDOWN_MINUTES), () => {
+  const ms = minutesToMs(COOLDOWN_MINUTES);
+  cooldownDeadline = Date.now() + ms;
+  cooldownTimer.schedule(ms, () => {
+    cooldownDeadline = null;
     mainWindow?.webContents.send('cooldown-elapsed');
     scheduleFocusTimer();
   });
@@ -113,6 +128,8 @@ ipcMain.on('show-pet-context-menu', () => {
         // configured interval, counting from when this stretch finishes.
         focusTimer.cancel();
         alertTimer.cancel();
+        focusDeadline = null;
+        cooldownDeadline = null;
         mainWindow?.webContents.send('force-stretch');
       },
     },
@@ -153,6 +170,21 @@ ipcMain.on('stretch-skip', () => {
 });
 
 ipcMain.handle('get-settings', () => getSettings());
+
+ipcMain.handle('get-minutes-until-next-stretch', () => {
+  if (cooldownDeadline !== null) {
+    // Mid-cooldown, the next focus timer hasn't started yet — the real wait
+    // is however much cooldown is left, plus a full focus interval after it.
+    const { focusMinutes } = getSettings();
+    const cooldownMsLeft = Math.max(0, cooldownDeadline - Date.now());
+    return Math.max(0, Math.ceil(cooldownMsLeft / 60000)) + focusMinutes;
+  }
+  if (focusDeadline !== null) {
+    return Math.max(0, Math.ceil((focusDeadline - Date.now()) / 60000));
+  }
+  // No countdown running right now (mid-alert or mid-stretch).
+  return null;
+});
 
 app.on('window-all-closed', () => {
   // no-op: keep running in the tray even if the overlay window closes

@@ -20,6 +20,7 @@ declare global {
       onForceStretch(callback: () => void): void;
       onShowSettingsPanel(callback: (focusMinutes: number) => void): void;
       setFocusMinutes(minutes: number): void;
+      getMinutesUntilNextStretch(): Promise<number | null>;
     };
   }
 }
