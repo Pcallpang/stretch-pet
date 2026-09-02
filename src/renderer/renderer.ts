@@ -10,15 +10,15 @@ const ASSET_BASE = '../../assets';
 const IDLE_FRAMES = [`${ASSET_BASE}/idle/1.png`, `${ASSET_BASE}/idle/2.png`];
 const WALK_FRAMES = [1, 2, 3, 4, 5].map((n) => `${ASSET_BASE}/walk/${n}.png`);
 
-const STRETCH_STEPS: { name: string; dialogueKey: DialogueKey; seconds: number }[] = [
-  { name: '준비', dialogueKey: 'stretch_start', seconds: 10 },
-  { name: '목 스트레칭', dialogueKey: 'stretch_neck_tilt', seconds: 10 },
-  { name: '어깨 스트레칭', dialogueKey: 'stretch_shoulder_roll', seconds: 15 },
-  { name: '상체 비틀기', dialogueKey: 'stretch_torso_twist', seconds: 15 },
-  { name: '골반/둔근 스트레칭', dialogueKey: 'stretch_hip_glute', seconds: 15 },
-  { name: '다리 뻗기', dialogueKey: 'stretch_leg_extension', seconds: 10 },
-  { name: '척추 비틀기', dialogueKey: 'stretch_spinal_twist', seconds: 15 },
-  { name: '심호흡/기지개', dialogueKey: 'stretch_deep_breath', seconds: 10 },
+const STRETCH_STEPS: { name: string; dialogueKey: DialogueKey; seconds: number; spriteSrc: string }[] = [
+  { name: '준비', dialogueKey: 'stretch_start', seconds: 10, spriteSrc: `${ASSET_BASE}/stretch/start.png` },
+  { name: '목 스트레칭', dialogueKey: 'stretch_neck_tilt', seconds: 10, spriteSrc: `${ASSET_BASE}/stretch/neck_tilt.png` },
+  { name: '어깨 스트레칭', dialogueKey: 'stretch_shoulder_roll', seconds: 15, spriteSrc: `${ASSET_BASE}/stretch/shoulder_roll.png` },
+  { name: '상체 비틀기', dialogueKey: 'stretch_torso_twist', seconds: 15, spriteSrc: `${ASSET_BASE}/stretch/torso_twist.png` },
+  { name: '골반/둔근 스트레칭', dialogueKey: 'stretch_hip_glute', seconds: 15, spriteSrc: `${ASSET_BASE}/stretch/hip_glute.png` },
+  { name: '다리 뻗기', dialogueKey: 'stretch_leg_extension', seconds: 10, spriteSrc: `${ASSET_BASE}/stretch/leg_extension.png` },
+  { name: '척추 비틀기', dialogueKey: 'stretch_spinal_twist', seconds: 15, spriteSrc: `${ASSET_BASE}/stretch/spinal_twist.png` },
+  { name: '심호흡/기지개', dialogueKey: 'stretch_deep_breath', seconds: 10, spriteSrc: `${ASSET_BASE}/stretch/deep_breath.png` },
 ];
 
 let state: PetState = 'idle';
@@ -89,9 +89,19 @@ function stepWalk(): void {
   petEl.classList.toggle('facing-left', facingLeft);
 }
 
+// Positions an overlay element (speech bubble / stretch panel) horizontally
+// so it tracks the pet's current position instead of sitting at a fixed CSS
+// left, clamped so it never runs off either edge of the screen.
+function trackPetX(el: HTMLElement, offset: number): void {
+  const maxLeft = Math.max(0, window.innerWidth - el.offsetWidth);
+  const left = Math.max(0, Math.min(petX - offset, maxLeft));
+  el.style.left = `${left}px`;
+}
+
 function showBubble(text: string): void {
   bubbleEl.textContent = text;
   bubbleEl.classList.remove('hidden');
+  trackPetX(bubbleEl, -20);
 }
 
 function hideBubble(): void {
@@ -105,6 +115,8 @@ function hidePanel(): void {
 function runStretchStep(): void {
   const step = STRETCH_STEPS[stretchStepIndex];
   nameEl.textContent = step.name;
+  petEl.src = step.spriteSrc;
+  trackPetX(panelEl, -40);
   showBubble(pickDialogue(step.dialogueKey));
   let remaining = step.seconds;
   countdownEl.textContent = String(remaining);
@@ -121,9 +133,15 @@ function runStretchStep(): void {
 function advanceStretchStep(): void {
   stretchStepIndex += 1;
   if (stretchStepIndex >= STRETCH_STEPS.length) {
+    // Show the completion line immediately, but delay the state transition
+    // (which hides the bubble via cooldown's onStateEnter) so it's actually
+    // visible for a few seconds instead of being shown and hidden in the
+    // same synchronous tick.
     showBubble(pickDialogue('complete'));
-    window.petAPI.notifyStretchComplete();
-    fire('stretch_complete');
+    setTimeout(() => {
+      window.petAPI.notifyStretchComplete();
+      fire('stretch_complete');
+    }, 3000);
   } else {
     runStretchStep();
   }
