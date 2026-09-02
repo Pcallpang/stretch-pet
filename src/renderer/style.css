@@ -12,10 +12,12 @@ html, body {
   position: absolute;
   width: 96px;
   height: 96px;
-  bottom: 40px;
-  left: 100px;
-  cursor: pointer;
+  cursor: grab;
   object-fit: contain;
+}
+
+#pet.dragging {
+  cursor: grabbing;
 }
 
 #pet.facing-left {
@@ -24,8 +26,6 @@ html, body {
 
 #speech-bubble {
   position: absolute;
-  bottom: 140px;
-  left: 60px;
   max-width: 220px;
   padding: 10px 14px;
   background: white;
@@ -41,14 +41,13 @@ html, body {
 
 #stretch-panel {
   position: absolute;
-  bottom: 160px;
-  left: 40px;
   padding: 12px;
   background: rgba(20, 20, 20, 0.85);
   color: white;
   border-radius: 12px;
   font-family: sans-serif;
   text-align: center;
+  max-width: 220px;
 }
 
 #stretch-panel.hidden {
@@ -59,6 +58,12 @@ html, body {
   font-size: 16px;
   font-weight: bold;
   margin-bottom: 4px;
+}
+
+#stretch-dialogue {
+  font-size: 13px;
+  opacity: 0.9;
+  margin-bottom: 6px;
 }
 
 #stretch-countdown {
@@ -75,8 +80,6 @@ html, body {
 
 #settings-panel {
   position: absolute;
-  bottom: 160px;
-  left: 40px;
   padding: 12px;
   background: rgba(20, 20, 20, 0.85);
   color: white;

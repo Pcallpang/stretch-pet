@@ -6,31 +6,63 @@ import { pickDialogue } from './dialoguePicker.js';
 import type { DialogueKey } from './dialogues.js';
 
 const ASSET_BASE = '../../assets';
+const PET_SIZE = 96;
+const OVERLAY_GAP = 12;
 
 const IDLE_FRAMES = [`${ASSET_BASE}/idle/1.png`, `${ASSET_BASE}/idle/2.png`];
 const WALK_FRAMES = [1, 2, 3, 4, 5].map((n) => `${ASSET_BASE}/walk/${n}.png`);
 
-const STRETCH_STEPS: { name: string; dialogueKey: DialogueKey; seconds: number; spriteSrc: string }[] = [
-  { name: '준비', dialogueKey: 'stretch_start', seconds: 10, spriteSrc: `${ASSET_BASE}/stretch/start.png` },
-  { name: '목 스트레칭', dialogueKey: 'stretch_neck_tilt', seconds: 10, spriteSrc: `${ASSET_BASE}/stretch/neck_tilt.png` },
-  { name: '어깨 스트레칭', dialogueKey: 'stretch_shoulder_roll', seconds: 15, spriteSrc: `${ASSET_BASE}/stretch/shoulder_roll.png` },
-  { name: '상체 비틀기', dialogueKey: 'stretch_torso_twist', seconds: 15, spriteSrc: `${ASSET_BASE}/stretch/torso_twist.png` },
-  { name: '골반/둔근 스트레칭', dialogueKey: 'stretch_hip_glute', seconds: 15, spriteSrc: `${ASSET_BASE}/stretch/hip_glute.png` },
-  { name: '다리 뻗기', dialogueKey: 'stretch_leg_extension', seconds: 10, spriteSrc: `${ASSET_BASE}/stretch/leg_extension.png` },
-  { name: '척추 비틀기', dialogueKey: 'stretch_spinal_twist', seconds: 15, spriteSrc: `${ASSET_BASE}/stretch/spinal_twist.png` },
-  { name: '심호흡/기지개', dialogueKey: 'stretch_deep_breath', seconds: 10, spriteSrc: `${ASSET_BASE}/stretch/deep_breath.png` },
+interface StretchStep {
+  name: string;
+  dialogueKey: DialogueKey;
+  seconds: number;
+  spriteSrc: string;
+  flip: boolean;
+}
+
+// "sided" moves are done once per side (왼쪽 then 오른쪽) since a real stretch
+// routine works both sides of the body, not just one. The character has a
+// single sprite per pose, so the second side reuses the same image mirrored
+// horizontally (the existing 'facing-left' CSS class, also used for walking).
+const BASE_STEPS: { name: string; dialogueKey: DialogueKey; seconds: number; spriteSrc: string; sided: boolean }[] = [
+  { name: '준비', dialogueKey: 'stretch_start', seconds: 10, spriteSrc: `${ASSET_BASE}/stretch/start.png`, sided: false },
+  { name: '목 스트레칭', dialogueKey: 'stretch_neck_tilt', seconds: 10, spriteSrc: `${ASSET_BASE}/stretch/neck_tilt.png`, sided: true },
+  { name: '어깨 스트레칭', dialogueKey: 'stretch_shoulder_roll', seconds: 15, spriteSrc: `${ASSET_BASE}/stretch/shoulder_roll.png`, sided: false },
+  { name: '상체 비틀기', dialogueKey: 'stretch_torso_twist', seconds: 15, spriteSrc: `${ASSET_BASE}/stretch/torso_twist.png`, sided: true },
+  { name: '골반/둔근 스트레칭', dialogueKey: 'stretch_hip_glute', seconds: 15, spriteSrc: `${ASSET_BASE}/stretch/hip_glute.png`, sided: true },
+  { name: '다리 뻗기', dialogueKey: 'stretch_leg_extension', seconds: 10, spriteSrc: `${ASSET_BASE}/stretch/leg_extension.png`, sided: true },
+  { name: '척추 비틀기', dialogueKey: 'stretch_spinal_twist', seconds: 15, spriteSrc: `${ASSET_BASE}/stretch/spinal_twist.png`, sided: true },
+  { name: '심호흡/기지개', dialogueKey: 'stretch_deep_breath', seconds: 10, spriteSrc: `${ASSET_BASE}/stretch/deep_breath.png`, sided: false },
 ];
+
+const STRETCH_STEPS: StretchStep[] = BASE_STEPS.flatMap((step) =>
+  step.sided
+    ? [
+        { name: `${step.name} (왼쪽)`, dialogueKey: step.dialogueKey, seconds: step.seconds, spriteSrc: step.spriteSrc, flip: false },
+        { name: `${step.name} (오른쪽)`, dialogueKey: step.dialogueKey, seconds: step.seconds, spriteSrc: step.spriteSrc, flip: true },
+      ]
+    : [{ name: step.name, dialogueKey: step.dialogueKey, seconds: step.seconds, spriteSrc: step.spriteSrc, flip: false }],
+);
 
 let state: PetState = 'idle';
 let facingLeft = false;
 let petX = 100;
+let petY = 0; // set once the window size is known, near the bottom of the screen
 const WALK_SPEED = 2;
 let stretchStepIndex = 0;
+
+let isDragging = false;
+let wasDragged = false;
+let dragStartMouseX = 0;
+let dragStartMouseY = 0;
+let dragStartPetX = 0;
+let dragStartPetY = 0;
 
 const petEl = document.getElementById('pet') as HTMLImageElement;
 const bubbleEl = document.getElementById('speech-bubble') as HTMLDivElement;
 const panelEl = document.getElementById('stretch-panel') as HTMLDivElement;
 const nameEl = document.getElementById('stretch-name') as HTMLDivElement;
+const stretchDialogueEl = document.getElementById('stretch-dialogue') as HTMLDivElement;
 const countdownEl = document.getElementById('stretch-countdown') as HTMLDivElement;
 const skipButton = document.getElementById('stretch-skip') as HTMLButtonElement;
 const settingsPanelEl = document.getElementById('settings-panel') as HTMLDivElement;
@@ -63,17 +95,20 @@ function onStateEnter(next: PetState): void {
 
   if (next === 'idle') {
     hideBubble();
+    petEl.classList.remove('facing-left');
     idleAnimator.start();
     window.petAPI.setIgnoreMouseEvents(true);
   } else if (next === 'walk') {
     hideBubble();
+    petEl.classList.toggle('facing-left', facingLeft);
     walkAnimator.start();
     walkInterval = setInterval(stepWalk, 50);
     window.petAPI.setIgnoreMouseEvents(true);
   } else if (next === 'alert') {
     const maxX = window.innerWidth - petEl.clientWidth;
     petX = Math.floor(maxX / 2);
-    petEl.style.left = `${petX}px`;
+    applyPetPosition();
+    petEl.classList.remove('facing-left');
     idleAnimator.start();
     showBubble(pickDialogue('alert_start'));
     // Window stays click-through by default (see the top-level
@@ -81,6 +116,7 @@ function onStateEnter(next: PetState): void {
     // only hovering the character itself (or the stretch panel once it's
     // shown) should re-enable mouse events, never the whole alert state.
   } else if (next === 'stretch') {
+    hideBubble();
     stretchStepIndex = 0;
     panelEl.classList.remove('hidden');
     window.petAPI.notifyStretchStart();
@@ -88,8 +124,21 @@ function onStateEnter(next: PetState): void {
   } else if (next === 'cooldown') {
     hidePanel();
     hideBubble();
+    petEl.classList.remove('facing-left');
     window.petAPI.setIgnoreMouseEvents(true);
   }
+}
+
+function applyPetPosition(): void {
+  petEl.style.left = `${petX}px`;
+  petEl.style.top = `${petY}px`;
+}
+
+function clampPetPosition(): void {
+  const maxX = window.innerWidth - petEl.clientWidth;
+  const maxY = window.innerHeight - petEl.clientHeight;
+  petX = Math.max(0, Math.min(petX, maxX));
+  petY = Math.max(0, Math.min(petY, maxY));
 }
 
 function stepWalk(): void {
@@ -97,23 +146,36 @@ function stepWalk(): void {
   const maxX = window.innerWidth - petEl.clientWidth;
   if (petX <= 0) { petX = 0; facingLeft = false; }
   if (petX >= maxX) { petX = maxX; facingLeft = true; }
-  petEl.style.left = `${petX}px`;
+  applyPetPosition();
   petEl.classList.toggle('facing-left', facingLeft);
 }
 
-// Positions an overlay element (speech bubble / stretch panel) horizontally
-// so it tracks the pet's current position instead of sitting at a fixed CSS
-// left, clamped so it never runs off either edge of the screen.
-function trackPetX(el: HTMLElement, offset: number): void {
+// Positions an overlay element (speech bubble / stretch panel / settings
+// panel) above the pet's current position, tracking it wherever it's been
+// dragged to instead of sitting at a fixed screen location. Falls back to
+// below the pet if there isn't room above (e.g. pet dragged near the top
+// edge), and clamps both axes so the overlay never runs off-screen.
+function positionOverlay(el: HTMLElement, xOffset: number): void {
   const maxLeft = Math.max(0, window.innerWidth - el.offsetWidth);
-  const left = Math.max(0, Math.min(petX - offset, maxLeft));
+  const left = Math.max(0, Math.min(petX - xOffset, maxLeft));
   el.style.left = `${left}px`;
+
+  const above = petY - el.offsetHeight - OVERLAY_GAP;
+  const top = above >= 0 ? above : petY + PET_SIZE + OVERLAY_GAP;
+  const maxTop = Math.max(0, window.innerHeight - el.offsetHeight);
+  el.style.top = `${Math.max(0, Math.min(top, maxTop))}px`;
+}
+
+function repositionVisibleOverlays(): void {
+  if (!bubbleEl.classList.contains('hidden')) positionOverlay(bubbleEl, -20);
+  if (!panelEl.classList.contains('hidden')) positionOverlay(panelEl, -40);
+  if (!settingsPanelEl.classList.contains('hidden')) positionOverlay(settingsPanelEl, -40);
 }
 
 function showBubble(text: string): void {
   bubbleEl.textContent = text;
   bubbleEl.classList.remove('hidden');
-  trackPetX(bubbleEl, -20);
+  positionOverlay(bubbleEl, -20);
 }
 
 function hideBubble(): void {
@@ -127,7 +189,7 @@ function hidePanel(): void {
 function showSettingsPanel(currentFocusMinutes: number): void {
   settingsMinutesInput.value = String(currentFocusMinutes);
   settingsPanelEl.classList.remove('hidden');
-  trackPetX(settingsPanelEl, -40);
+  positionOverlay(settingsPanelEl, -40);
 }
 
 function hideSettingsPanel(): void {
@@ -137,9 +199,10 @@ function hideSettingsPanel(): void {
 function runStretchStep(): void {
   const step = STRETCH_STEPS[stretchStepIndex];
   nameEl.textContent = step.name;
+  stretchDialogueEl.textContent = pickDialogue(step.dialogueKey);
   petEl.src = step.spriteSrc;
-  trackPetX(panelEl, -40);
-  showBubble(pickDialogue(step.dialogueKey));
+  petEl.classList.toggle('facing-left', step.flip);
+  positionOverlay(panelEl, -40);
   let remaining = step.seconds;
   countdownEl.textContent = String(remaining);
   countdownInterval = setInterval(() => {
@@ -155,11 +218,15 @@ function runStretchStep(): void {
 function advanceStretchStep(): void {
   stretchStepIndex += 1;
   if (stretchStepIndex >= STRETCH_STEPS.length) {
-    // Show the completion line immediately, but delay the state transition
-    // (which hides the bubble via cooldown's onStateEnter) so it's actually
-    // visible for a few seconds instead of being shown and hidden in the
-    // same synchronous tick.
-    showBubble(pickDialogue('complete'));
+    // Show the completion line immediately (inside the still-visible stretch
+    // panel, not a separate bubble — a floating bubble here used to overlap
+    // the panel's own countdown text), but delay the state transition (which
+    // hides the panel via cooldown's onStateEnter) so it's actually visible
+    // for a few seconds instead of being shown and hidden in the same
+    // synchronous tick.
+    nameEl.textContent = '완료';
+    countdownEl.textContent = '';
+    stretchDialogueEl.textContent = pickDialogue('complete');
     setTimeout(() => {
       window.petAPI.notifyStretchComplete();
       fire('stretch_complete');
@@ -177,14 +244,51 @@ skipButton.addEventListener('click', () => {
 
 petEl.addEventListener('mouseenter', () => window.petAPI.setIgnoreMouseEvents(false));
 petEl.addEventListener('mouseleave', () => {
-  // Always re-enable click-through on leave, regardless of state (e.g.
-  // leaving during 'alert' without clicking). idle/walk entry also
+  // Dragging can carry the cursor faster than the pet visually re-renders,
+  // so don't let a transient mouseleave mid-drag re-enable click-through —
+  // onDragEnd (or the next real hover) settles it once the drag is done.
+  if (isDragging) return;
+  // Always re-enable click-through on leave otherwise, regardless of state
+  // (e.g. leaving during 'alert' without clicking). idle/walk entry also
   // re-asserts this as a safety net, but this must not be gated on state
   // here — a state-scoped guard is exactly what left the whole desktop
   // permanently non-click-through when the pet was hovered-then-left
   // during 'alert' or 'stretch'.
   window.petAPI.setIgnoreMouseEvents(true);
 });
+
+petEl.addEventListener('mousedown', (event) => {
+  isDragging = true;
+  wasDragged = false;
+  dragStartMouseX = event.clientX;
+  dragStartMouseY = event.clientY;
+  dragStartPetX = petX;
+  dragStartPetY = petY;
+  petEl.classList.add('dragging');
+  document.addEventListener('mousemove', onDragMove);
+  document.addEventListener('mouseup', onDragEnd);
+});
+
+function onDragMove(event: MouseEvent): void {
+  const dx = event.clientX - dragStartMouseX;
+  const dy = event.clientY - dragStartMouseY;
+  // A few pixels of slop before counting this as a real drag, so a plain
+  // click (e.g. to start the stretch routine during 'alert') isn't
+  // accidentally swallowed by tiny, unintentional mouse movement.
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) wasDragged = true;
+  petX = dragStartPetX + dx;
+  petY = dragStartPetY + dy;
+  clampPetPosition();
+  applyPetPosition();
+  repositionVisibleOverlays();
+}
+
+function onDragEnd(): void {
+  isDragging = false;
+  petEl.classList.remove('dragging');
+  document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('mouseup', onDragEnd);
+}
 
 // Same hover-scoped enable/disable pattern as the pet itself, so the user
 // can click the skip button / interact with the panel during 'stretch'
@@ -197,6 +301,10 @@ panelEl.addEventListener('mouseleave', () => {
 });
 
 petEl.addEventListener('click', () => {
+  if (wasDragged) {
+    wasDragged = false;
+    return;
+  }
   if (state === 'alert') {
     fire('user_start_stretch');
   }
@@ -233,5 +341,7 @@ setInterval(() => {
   else if (state === 'walk') fire('wander_pause');
 }, 8000);
 
+petY = window.innerHeight - 40 - PET_SIZE;
+applyPetPosition();
 window.petAPI.setIgnoreMouseEvents(true);
 onStateEnter('idle');
