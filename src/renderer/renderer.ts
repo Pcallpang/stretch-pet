@@ -257,7 +257,16 @@ petEl.addEventListener('mouseleave', () => {
   window.petAPI.setIgnoreMouseEvents(true);
 });
 
-petEl.addEventListener('mousedown', (event) => {
+// Pointer capture (not plain mousedown/document-mousemove) is what makes
+// this a real press-hold-move-release drag: on this transparent, click-
+// through overlay window, a document-level mousemove listener was not a
+// reliable way to keep tracking the pointer once the button went down —
+// it behaved like two separate clicks ("pick up", then "put down") instead
+// of a continuous drag. Capturing the pointer to the pet element forces
+// every subsequent pointer event to target it directly until release,
+// regardless of where the cursor physically is, which is exactly what a
+// drag needs.
+petEl.addEventListener('pointerdown', (event) => {
   isDragging = true;
   wasDragged = false;
   dragStartMouseX = event.clientX;
@@ -265,11 +274,11 @@ petEl.addEventListener('mousedown', (event) => {
   dragStartPetX = petX;
   dragStartPetY = petY;
   petEl.classList.add('dragging');
-  document.addEventListener('mousemove', onDragMove);
-  document.addEventListener('mouseup', onDragEnd);
+  petEl.setPointerCapture(event.pointerId);
 });
 
-function onDragMove(event: MouseEvent): void {
+petEl.addEventListener('pointermove', (event) => {
+  if (!isDragging) return;
   const dx = event.clientX - dragStartMouseX;
   const dy = event.clientY - dragStartMouseY;
   // A few pixels of slop before counting this as a real drag, so a plain
@@ -281,14 +290,14 @@ function onDragMove(event: MouseEvent): void {
   clampPetPosition();
   applyPetPosition();
   repositionVisibleOverlays();
-}
+});
 
-function onDragEnd(): void {
+petEl.addEventListener('pointerup', (event) => {
+  if (!isDragging) return;
   isDragging = false;
   petEl.classList.remove('dragging');
-  document.removeEventListener('mousemove', onDragMove);
-  document.removeEventListener('mouseup', onDragEnd);
-}
+  petEl.releasePointerCapture(event.pointerId);
+});
 
 // Same hover-scoped enable/disable pattern as the pet itself, so the user
 // can click the skip button / interact with the panel during 'stretch'
