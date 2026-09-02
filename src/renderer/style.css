@@ -15,6 +15,7 @@ html, body {
   bottom: 40px;
   left: 100px;
   cursor: pointer;
+  object-fit: contain;
 }
 
 #pet.facing-left {
