@@ -3,6 +3,7 @@ import * as path from 'path';
 import { TimerScheduler, minutesToMs } from './timerScheduler';
 import { getSettings, setSettings } from './settings';
 import { createTray, refreshTray } from './tray';
+import { clampFocusMinutes, computeMinutesUntilNextStretch } from './nextStretch';
 
 const COOLDOWN_MINUTES = 2;
 const MIN_FOCUS_MINUTES = 5;
@@ -146,7 +147,7 @@ ipcMain.on('show-pet-context-menu', () => {
 });
 
 ipcMain.on('set-focus-minutes', (_event, minutes: number) => {
-  const clamped = Math.min(MAX_FOCUS_MINUTES, Math.max(MIN_FOCUS_MINUTES, Math.round(minutes)));
+  const clamped = clampFocusMinutes(minutes, MIN_FOCUS_MINUTES, MAX_FOCUS_MINUTES);
   setSettings({ focusMinutes: clamped });
   refreshTray();
   // The new interval takes effect immediately: the next automatic stretch
@@ -172,18 +173,13 @@ ipcMain.on('stretch-skip', () => {
 ipcMain.handle('get-settings', () => getSettings());
 
 ipcMain.handle('get-minutes-until-next-stretch', () => {
-  if (cooldownDeadline !== null) {
-    // Mid-cooldown, the next focus timer hasn't started yet — the real wait
-    // is however much cooldown is left, plus a full focus interval after it.
-    const { focusMinutes } = getSettings();
-    const cooldownMsLeft = Math.max(0, cooldownDeadline - Date.now());
-    return Math.max(0, Math.ceil(cooldownMsLeft / 60000)) + focusMinutes;
-  }
-  if (focusDeadline !== null) {
-    return Math.max(0, Math.ceil((focusDeadline - Date.now()) / 60000));
-  }
-  // No countdown running right now (mid-alert or mid-stretch).
-  return null;
+  const { focusMinutes } = getSettings();
+  return computeMinutesUntilNextStretch({
+    cooldownDeadline,
+    focusDeadline,
+    focusMinutes,
+    now: Date.now(),
+  });
 });
 
 app.on('window-all-closed', () => {

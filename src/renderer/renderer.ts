@@ -4,6 +4,13 @@ import type { PetState, PetEvent } from './fsm.js';
 import { SpriteAnimator } from './spriteAnimator.js';
 import { pickDialogue } from './dialoguePicker.js';
 import type { DialogueKey } from './dialogues.js';
+import {
+  clampPosition,
+  computeWalkStep,
+  exceedsDragThreshold,
+  computeDragPosition,
+  computeOverlayPosition,
+} from './petPosition.js';
 
 const ASSET_BASE = '../../assets';
 const PET_SIZE = 96;
@@ -141,15 +148,16 @@ function applyPetPosition(): void {
 function clampPetPosition(): void {
   const maxX = window.innerWidth - petEl.clientWidth;
   const maxY = window.innerHeight - petEl.clientHeight;
-  petX = Math.max(0, Math.min(petX, maxX));
-  petY = Math.max(0, Math.min(petY, maxY));
+  const clamped = clampPosition(petX, petY, maxX, maxY);
+  petX = clamped.x;
+  petY = clamped.y;
 }
 
 function stepWalk(): void {
-  petX += facingLeft ? -WALK_SPEED : WALK_SPEED;
   const maxX = window.innerWidth - petEl.clientWidth;
-  if (petX <= 0) { petX = 0; facingLeft = false; }
-  if (petX >= maxX) { petX = maxX; facingLeft = true; }
+  const next = computeWalkStep({ x: petX, facingLeft, maxX, speed: WALK_SPEED });
+  petX = next.x;
+  facingLeft = next.facingLeft;
   applyPetPosition();
   petEl.classList.toggle('facing-left', facingLeft);
 }
@@ -160,14 +168,19 @@ function stepWalk(): void {
 // below the pet if there isn't room above (e.g. pet dragged near the top
 // edge), and clamps both axes so the overlay never runs off-screen.
 function positionOverlay(el: HTMLElement, xOffset: number): void {
-  const maxLeft = Math.max(0, window.innerWidth - el.offsetWidth);
-  const left = Math.max(0, Math.min(petX - xOffset, maxLeft));
+  const { left, top } = computeOverlayPosition({
+    petX,
+    petY,
+    petSize: PET_SIZE,
+    gap: OVERLAY_GAP,
+    xOffset,
+    elWidth: el.offsetWidth,
+    elHeight: el.offsetHeight,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+  });
   el.style.left = `${left}px`;
-
-  const above = petY - el.offsetHeight - OVERLAY_GAP;
-  const top = above >= 0 ? above : petY + PET_SIZE + OVERLAY_GAP;
-  const maxTop = Math.max(0, window.innerHeight - el.offsetHeight);
-  el.style.top = `${Math.max(0, Math.min(top, maxTop))}px`;
+  el.style.top = `${top}px`;
 }
 
 function repositionVisibleOverlays(): void {
@@ -314,9 +327,10 @@ petEl.addEventListener('pointermove', (event) => {
   // A few pixels of slop before counting this as a real drag, so a plain
   // click (e.g. to start the stretch routine during 'alert') isn't
   // accidentally swallowed by tiny, unintentional mouse movement.
-  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) wasDragged = true;
-  petX = dragStartPetX + dx;
-  petY = dragStartPetY + dy;
+  if (exceedsDragThreshold(dx, dy, 3)) wasDragged = true;
+  const dragged = computeDragPosition({ dragStartX: dragStartPetX, dragStartY: dragStartPetY, dx, dy });
+  petX = dragged.x;
+  petY = dragged.y;
   clampPetPosition();
   applyPetPosition();
   repositionVisibleOverlays();
