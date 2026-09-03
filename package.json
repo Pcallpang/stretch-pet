@@ -1,6 +1,8 @@
 {
   "name": "stretch-pet",
   "version": "0.1.0",
+  "description": "화면 위를 돌아다니다 정해진 시간마다 스트레칭을 시켜주는 데스크톱 펫",
+  "author": "Pcallpang",
   "private": true,
   "main": "dist/main/main.js",
   "scripts": {
