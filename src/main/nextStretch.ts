@@ -1,4 +1,5 @@
 export function clampFocusMinutes(minutes: number, min: number, max: number): number {
+  if (!Number.isFinite(minutes)) return min;
   return Math.min(max, Math.max(min, Math.round(minutes)));
 }
 

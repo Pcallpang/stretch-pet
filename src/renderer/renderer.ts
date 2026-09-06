@@ -82,6 +82,7 @@ const walkAnimator = new SpriteAnimator(WALK_FRAMES, 6, (src) => { petEl.src = s
 
 let walkInterval: ReturnType<typeof setInterval> | null = null;
 let countdownInterval: ReturnType<typeof setInterval> | null = null;
+let completionTimeout: ReturnType<typeof setTimeout> | null = null;
 
 function fire(event: PetEvent): void {
   const next = transition(state, event);
@@ -91,6 +92,7 @@ function fire(event: PetEvent): void {
 }
 
 function onStateEnter(next: PetState): void {
+  if (completionTimeout) { clearTimeout(completionTimeout); completionTimeout = null; }
   idleAnimator.stop();
   walkAnimator.stop();
   if (walkInterval) { clearInterval(walkInterval); walkInterval = null; }
@@ -154,11 +156,13 @@ function clampPetPosition(): void {
 }
 
 function stepWalk(): void {
+  if (isDragging || !settingsPanelEl.classList.contains('hidden')) return;
   const maxX = window.innerWidth - petEl.clientWidth;
   const next = computeWalkStep({ x: petX, facingLeft, maxX, speed: WALK_SPEED });
   petX = next.x;
   facingLeft = next.facingLeft;
   applyPetPosition();
+  repositionVisibleOverlays();
   petEl.classList.toggle('facing-left', facingLeft);
 }
 
@@ -218,6 +222,8 @@ function showSettingsPanel(currentFocusMinutes: number): void {
 
 function hideSettingsPanel(): void {
   settingsPanelEl.classList.add('hidden');
+  window.petAPI.setIgnoreMouseEvents(!isDragging && !petEl.matches(':hover') &&
+    (panelEl.classList.contains('hidden') || !panelEl.matches(':hover')));
 }
 
 function runStretchStep(): void {
@@ -251,7 +257,8 @@ function advanceStretchStep(): void {
     nameEl.textContent = '완료';
     countdownEl.textContent = '';
     stretchDialogueEl.textContent = pickDialogue('complete');
-    setTimeout(() => {
+    completionTimeout = setTimeout(() => {
+      if (state !== 'stretch') return;
       window.petAPI.notifyStretchComplete();
       fire('stretch_complete');
     }, 3000);
@@ -261,6 +268,7 @@ function advanceStretchStep(): void {
 }
 
 skipButton.addEventListener('click', () => {
+  if (state !== 'stretch') return;
   if (countdownInterval) clearInterval(countdownInterval);
   window.petAPI.notifyStretchSkip();
   fire('stretch_skip');
@@ -313,12 +321,16 @@ petEl.addEventListener('pointerdown', (event) => {
 
 petEl.addEventListener('dragstart', (event) => event.preventDefault());
 
-petEl.addEventListener('pointercancel', () => {
+function cancelDrag(): void {
   // Defensive reset: if capture is lost some other way (e.g. focus moving
   // to a native menu/dialog mid-drag), don't leave isDragging stuck true.
   isDragging = false;
+  wasDragged = true;
   petEl.classList.remove('dragging');
-});
+  window.petAPI.setIgnoreMouseEvents(!petEl.matches(':hover'));
+}
+petEl.addEventListener('pointercancel', cancelDrag);
+petEl.addEventListener('lostpointercapture', () => { if (isDragging) cancelDrag(); });
 
 petEl.addEventListener('pointermove', (event) => {
   if (!isDragging) return;
@@ -370,7 +382,7 @@ petEl.addEventListener('click', () => {
 // compete with the pet's normal wandering/speech bubble later.
 function showNextStretchCountdown(): void {
   window.petAPI.getMinutesUntilNextStretch().then((minutes) => {
-    if (minutes === null) return; // state changed while the request was in flight
+    if (minutes === null || (state !== 'idle' && state !== 'walk' && state !== 'cooldown')) return; // state changed while the request was in flight
     showBubble(minutes <= 0 ? '곧 스트레칭 시간이에요!' : `다음 스트레칭까지 ${minutes}분 남았어요.`);
     const token = bubbleToken;
     setTimeout(() => {
@@ -406,9 +418,16 @@ window.petAPI.onForceStretch(() => fire('force_start_stretch'));
 window.petAPI.onShowSettingsPanel((focusMinutes) => showSettingsPanel(focusMinutes));
 
 setInterval(() => {
+  if (isDragging || !settingsPanelEl.classList.contains('hidden')) return;
   if (state === 'idle') fire('wander_start');
   else if (state === 'walk') fire('wander_pause');
 }, 8000);
+
+window.addEventListener('resize', () => {
+  clampPetPosition();
+  applyPetPosition();
+  repositionVisibleOverlays();
+});
 
 petY = window.innerHeight - 40 - PET_SIZE;
 applyPetPosition();

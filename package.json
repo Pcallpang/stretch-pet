@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json",
     "start": "npm run build && electron .",
     "test": "vitest run",
+    "test:smoke": "npm run build && node scripts/smoke-test.cjs",
     "slice-sprites": "node scripts/slice-sprites.mjs",
     "package": "npm run build && electron-builder --win portable"
   },

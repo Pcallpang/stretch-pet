@@ -21,3 +21,16 @@ describe('clampSettings', () => {
     });
   });
 });
+
+
+describe('invalid persisted settings', () => {
+  it('rejects non-finite and wrongly typed stored values', () => {
+    expect(clampSettings({ focusMinutes: Infinity, stretchMinutes: NaN,
+      soundEnabled: 'false', autoStart: 1 } as any)).toEqual(DEFAULT_SETTINGS);
+  });
+  it('normalizes the supported focus range and integer precision', () => {
+    expect(clampSettings({ focusMinutes: 999 }).focusMinutes).toBe(180);
+    expect(clampSettings({ focusMinutes: 1 }).focusMinutes).toBe(5);
+    expect(clampSettings({ focusMinutes: 25.6 }).focusMinutes).toBe(26);
+  });
+});

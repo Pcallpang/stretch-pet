@@ -17,15 +17,15 @@ export const DEFAULT_SETTINGS: PetSettings = {
 export function clampSettings(settings: Partial<PetSettings>): PetSettings {
   return {
     focusMinutes:
-      settings.focusMinutes && settings.focusMinutes > 0
-        ? settings.focusMinutes
+      Number.isFinite(settings.focusMinutes) && typeof settings.focusMinutes === 'number' && settings.focusMinutes > 0
+        ? Math.min(180, Math.max(5, Math.round(settings.focusMinutes)))
         : DEFAULT_SETTINGS.focusMinutes,
     stretchMinutes:
-      settings.stretchMinutes && settings.stretchMinutes > 0
+      Number.isFinite(settings.stretchMinutes) && typeof settings.stretchMinutes === 'number' && settings.stretchMinutes > 0
         ? settings.stretchMinutes
         : DEFAULT_SETTINGS.stretchMinutes,
-    soundEnabled: settings.soundEnabled ?? DEFAULT_SETTINGS.soundEnabled,
-    autoStart: settings.autoStart ?? DEFAULT_SETTINGS.autoStart,
+    soundEnabled: typeof settings.soundEnabled === 'boolean' ? settings.soundEnabled : DEFAULT_SETTINGS.soundEnabled,
+    autoStart: typeof settings.autoStart === 'boolean' ? settings.autoStart : DEFAULT_SETTINGS.autoStart,
   };
 }
 

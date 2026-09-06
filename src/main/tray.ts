@@ -4,6 +4,7 @@ import { getSettings, setSettings } from './settings';
 
 interface TrayCallbacks {
   onQuit: () => void;
+  onFocusMinutesChange: (minutes: number) => void;
 }
 
 let tray: Tray | null = null;
@@ -43,26 +44,27 @@ function rebuildMenu(callbacks: TrayCallbacks): void {
     },
     { type: 'separator' },
     {
-      label: '50분 집중 / 5분 스트레칭',
+      label: '50분 집중 / 2분 45초 스트레칭',
       type: 'radio',
-      checked: settings.focusMinutes === 50 && settings.stretchMinutes === 5,
+      checked: settings.focusMinutes === 50,
       click: () => {
-        setSettings({ focusMinutes: 50, stretchMinutes: 5 });
+        callbacks.onFocusMinutesChange(50);
         rebuildMenu(callbacks);
       },
     },
     {
-      label: '25분 집중 / 5분 스트레칭',
+      label: '25분 집중 / 2분 45초 스트레칭',
       type: 'radio',
-      checked: settings.focusMinutes === 25 && settings.stretchMinutes === 5,
+      checked: settings.focusMinutes === 25,
       click: () => {
-        setSettings({ focusMinutes: 25, stretchMinutes: 5 });
+        callbacks.onFocusMinutesChange(25);
         rebuildMenu(callbacks);
       },
     },
     { type: 'separator' },
     {
-      label: '소리',
+      label: '소리 (준비 중)',
+      enabled: false,
       type: 'checkbox',
       checked: settings.soundEnabled,
       click: (menuItem) => {

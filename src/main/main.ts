@@ -25,14 +25,15 @@ const alertTimer = new TimerScheduler();
 // countdown to show.
 let focusDeadline: number | null = null;
 let cooldownDeadline: number | null = null;
+let phase: 'focus' | 'alert' | 'stretch' | 'cooldown' = 'focus';
 
 function createWindow(): void {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const { x, y, width, height } = screen.getPrimaryDisplay().workArea;
   mainWindow = new BrowserWindow({
     width,
     height,
-    x: 0,
-    y: 0,
+    x,
+    y,
     transparent: true,
     frame: false,
     alwaysOnTop: true,
@@ -43,6 +44,7 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
   });
 
@@ -50,13 +52,31 @@ function createWindow(): void {
   mainWindow.loadFile(path.join(__dirname, '..', '..', 'src', 'renderer', 'index.html'));
 }
 
+function cancelTimers(): void {
+  focusTimer.cancel();
+  cooldownTimer.cancel();
+  alertTimer.cancel();
+  focusDeadline = null;
+  cooldownDeadline = null;
+}
+
+function updateFocusMinutes(minutes: number): void {
+  if (!Number.isFinite(minutes)) return;
+  setSettings({ focusMinutes: clampFocusMinutes(minutes, MIN_FOCUS_MINUTES, MAX_FOCUS_MINUTES) });
+  refreshTray();
+  if (phase === 'focus') scheduleFocusTimer();
+}
+
 function scheduleFocusTimer(): void {
+  cancelTimers();
+  phase = 'focus';
   const { focusMinutes } = getSettings();
   const ms = minutesToMs(focusMinutes);
   focusDeadline = Date.now() + ms;
   cooldownDeadline = null;
   focusTimer.schedule(ms, () => {
     focusDeadline = null;
+    phase = 'alert';
     mainWindow?.webContents.send('timer-elapsed');
     scheduleAlertTimeout();
   });
@@ -73,6 +93,8 @@ function scheduleAlertTimeout(): void {
 }
 
 function scheduleCooldownTimer(): void {
+  cancelTimers();
+  phase = 'cooldown';
   const ms = minutesToMs(COOLDOWN_MINUTES);
   cooldownDeadline = Date.now() + ms;
   cooldownTimer.schedule(ms, () => {
@@ -93,7 +115,7 @@ app.whenReady().then(() => {
   }
 
   try {
-    createTray({ onQuit: () => app.quit() });
+    createTray({ onQuit: () => app.quit(), onFocusMinutesChange: updateFocusMinutes });
   } catch (err) {
     // Tray creation can throw on Windows if the icon image fails to load
     // (see tray.ts). Losing the tray means losing the menu-based quit path,
@@ -123,14 +145,9 @@ ipcMain.on('show-pet-context-menu', () => {
     {
       label: '지금 스트레칭 하기',
       click: () => {
-        // Cancel whatever the normal focus/alert cycle was waiting on — the
-        // manual stretch takes over, and the usual stretch-complete/skip
-        // handlers below already reschedule the focus timer for the
-        // configured interval, counting from when this stretch finishes.
-        focusTimer.cancel();
-        alertTimer.cancel();
-        focusDeadline = null;
-        cooldownDeadline = null;
+        if (phase === 'stretch') return;
+        cancelTimers();
+        phase = 'stretch';
         mainWindow?.webContents.send('force-stretch');
       },
     },
@@ -147,26 +164,21 @@ ipcMain.on('show-pet-context-menu', () => {
 });
 
 ipcMain.on('set-focus-minutes', (_event, minutes: number) => {
-  const clamped = clampFocusMinutes(minutes, MIN_FOCUS_MINUTES, MAX_FOCUS_MINUTES);
-  setSettings({ focusMinutes: clamped });
-  refreshTray();
-  // The new interval takes effect immediately: the next automatic stretch
-  // fires this many minutes from now, not from whenever the old timer was
-  // going to fire.
-  scheduleFocusTimer();
+  updateFocusMinutes(minutes);
 });
 
 ipcMain.on('stretch-started', () => {
-  alertTimer.cancel();
+  cancelTimers();
+  phase = 'stretch';
 });
 
 ipcMain.on('stretch-complete', () => {
-  alertTimer.cancel();
+  if (phase !== 'stretch') return;
   scheduleCooldownTimer();
 });
 
 ipcMain.on('stretch-skip', () => {
-  alertTimer.cancel();
+  if (phase !== 'stretch') return;
   scheduleCooldownTimer();
 });
 
@@ -185,3 +197,10 @@ ipcMain.handle('get-minutes-until-next-stretch', () => {
 app.on('window-all-closed', () => {
   // no-op: keep running in the tray even if the overlay window closes
 });
+
+app.on('before-quit', cancelTimers);
+app.whenReady().then(() => screen.on('display-metrics-changed', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setBounds(screen.getPrimaryDisplay().workArea);
+  }
+}));
