@@ -3,6 +3,7 @@ export interface PetSettings {
   stretchMinutes: number;
   soundEnabled: boolean;
   autoStart: boolean;
+  pinned: boolean;
 }
 
 declare global {
@@ -21,6 +22,7 @@ declare global {
       onShowSettingsPanel(callback: (focusMinutes: number) => void): void;
       setFocusMinutes(minutes: number): void;
       getMinutesUntilNextStretch(): Promise<number | null>;
+      onPinnedChanged(callback: (pinned: boolean) => void): void;
     };
   }
 }

@@ -5,6 +5,7 @@ export interface PetSettings {
   stretchMinutes: number;
   soundEnabled: boolean;
   autoStart: boolean;
+  pinned: boolean;
 }
 
 export const DEFAULT_SETTINGS: PetSettings = {
@@ -12,6 +13,7 @@ export const DEFAULT_SETTINGS: PetSettings = {
   stretchMinutes: 5,
   soundEnabled: false,
   autoStart: false,
+  pinned: false,
 };
 
 export function clampSettings(settings: Partial<PetSettings>): PetSettings {
@@ -26,6 +28,7 @@ export function clampSettings(settings: Partial<PetSettings>): PetSettings {
         : DEFAULT_SETTINGS.stretchMinutes,
     soundEnabled: typeof settings.soundEnabled === 'boolean' ? settings.soundEnabled : DEFAULT_SETTINGS.soundEnabled,
     autoStart: typeof settings.autoStart === 'boolean' ? settings.autoStart : DEFAULT_SETTINGS.autoStart,
+    pinned: typeof settings.pinned === 'boolean' ? settings.pinned : DEFAULT_SETTINGS.pinned,
   };
 }
 

@@ -18,7 +18,14 @@ describe('clampSettings', () => {
       stretchMinutes: 5,
       soundEnabled: true,
       autoStart: false,
+      pinned: false,
     });
+  });
+
+  it('keeps a valid pinned override', () => {
+    expect(clampSettings({ pinned: true })).toEqual(
+      expect.objectContaining({ pinned: true }),
+    );
   });
 });
 
@@ -26,7 +33,7 @@ describe('clampSettings', () => {
 describe('invalid persisted settings', () => {
   it('rejects non-finite and wrongly typed stored values', () => {
     expect(clampSettings({ focusMinutes: Infinity, stretchMinutes: NaN,
-      soundEnabled: 'false', autoStart: 1 } as any)).toEqual(DEFAULT_SETTINGS);
+      soundEnabled: 'false', autoStart: 1, pinned: 'yes' } as any)).toEqual(DEFAULT_SETTINGS);
   });
   it('normalizes the supported focus range and integer precision', () => {
     expect(clampSettings({ focusMinutes: 999 }).focusMinutes).toBe(180);

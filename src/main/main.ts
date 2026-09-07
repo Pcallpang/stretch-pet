@@ -158,6 +158,16 @@ ipcMain.on('show-pet-context-menu', () => {
       },
     },
     { type: 'separator' },
+    {
+      label: '고정하기',
+      type: 'checkbox',
+      checked: getSettings().pinned,
+      click: (menuItem) => {
+        setSettings({ pinned: menuItem.checked });
+        mainWindow?.webContents.send('pinned-changed', menuItem.checked);
+      },
+    },
+    { type: 'separator' },
     { label: '종료', click: () => app.quit() },
   ]);
   if (mainWindow) menu.popup({ window: mainWindow });

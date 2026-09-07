@@ -58,6 +58,8 @@ let petY = 0; // set once the window size is known, near the bottom of the scree
 const WALK_SPEED = 2;
 let stretchStepIndex = 0;
 
+let pinned = false;
+
 let isDragging = false;
 let wasDragged = false;
 let dragStartMouseX = 0;
@@ -416,9 +418,15 @@ window.petAPI.onCooldownElapsed(() => fire('cooldown_elapsed'));
 window.petAPI.onAlertTimeout(() => fire('alert_timeout'));
 window.petAPI.onForceStretch(() => fire('force_start_stretch'));
 window.petAPI.onShowSettingsPanel((focusMinutes) => showSettingsPanel(focusMinutes));
+window.petAPI.onPinnedChanged((next) => {
+  pinned = next;
+  // Pinning while the pet happens to be mid-walk should stop it immediately
+  // rather than waiting for it to reach the edge of its current stroll.
+  if (pinned && state === 'walk') fire('wander_pause');
+});
 
 setInterval(() => {
-  if (isDragging || !settingsPanelEl.classList.contains('hidden')) return;
+  if (isDragging || pinned || !settingsPanelEl.classList.contains('hidden')) return;
   if (state === 'idle') fire('wander_start');
   else if (state === 'walk') fire('wander_pause');
 }, 8000);
@@ -433,3 +441,4 @@ petY = window.innerHeight - 40 - PET_SIZE;
 applyPetPosition();
 window.petAPI.setIgnoreMouseEvents(true);
 onStateEnter('idle');
+window.petAPI.getSettings().then((settings) => { pinned = settings.pinned; });
