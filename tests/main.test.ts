@@ -65,3 +65,25 @@ describe('main process timer integration', () => {
     expect(remaining()).toBe(50);
   });
 });
+
+ describe('character context menu', () => {
+  it('saves selection, marks the selected item and leaves the focus countdown running', () => {
+    minutes(10);
+    emit('show-pet-context-menu');
+    const submenu = mock.menu.find(item => item.submenu)?.submenu;
+    expect(submenu).toHaveLength(4);
+    submenu[3].click();
+    expect(mock.settings).toMatchObject({ character: 'godmiyo' });
+    expect(mock.send).toHaveBeenCalledWith('character-changed', 'godmiyo');
+    expect(remaining()).toBe(40);
+    emit('show-pet-context-menu');
+    expect(mock.menu.find(item => item.submenu).submenu.map((item: any) => item.checked))
+      .toEqual([false, false, false, true]);
+  });
+  it('does not reset an active stretch when changing character', () => {
+    manual(); emit('show-pet-context-menu');
+    mock.menu.find(item => item.submenu).submenu[0].click();
+    expect(remaining()).toBeNull();
+    emit('stretch-complete'); expect(remaining()).toBe(52);
+  });
+});

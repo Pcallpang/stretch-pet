@@ -15,7 +15,14 @@ if (!process.versions.electron) {
   // Isolated settings are intentionally kept in the OS temp directory for diagnostics.
   process.exit(result.status ?? 1);
 }
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, Menu } = require('electron');
+let petMenu;
+const buildMenu = Menu.buildFromTemplate.bind(Menu);
+Menu.buildFromTemplate = template => {
+  const menu = buildMenu(template);
+  if (template.some(item => item.submenu)) { petMenu = menu; menu.popup = () => {}; }
+  return menu;
+};
 const assert = require('node:assert/strict');
 app.setPath('userData', process.env.STRETCH_PET_SMOKE_DATA);
 const errors = [];
@@ -53,6 +60,39 @@ app.whenReady().then(async () => {
       img.onerror = () => reject(new Error(src)); img.src = src;
     }))).then(results => results.every(Boolean))`), true);
     console.log('PASS: startup, preload, all sprites, settings and focus timer');
+    const characters = ['miyo', 'miyox', 'deodeumiyo', 'godmiyo'];
+    async function chooseCharacter(index) {
+      petMenu = null;
+      await run(`document.getElementById('pet').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, button: 2 }));`);
+      await waitFor(() => Boolean(petMenu), 'right-click menu');
+      const items = petMenu.items.find(item => item.submenu).submenu.items;
+      assert.equal(items.length, 4);
+      items[index].click();
+      await waitFor(() => run(`document.getElementById('pet').dataset.character === '${characters[index]}' && document.getElementById('pet').complete && document.getElementById('pet').naturalWidth > 0`), 'character loads');
+      assert.equal(await run(`window.petAPI.getSettings().then(s => s.character)`), characters[index]);
+    }
+    for (let i = 0; i < characters.length; i++) {
+      await chooseCharacter(i);
+      const files = ['idle/1','idle/2','walk/1','walk/2','walk/3','walk/4',
+        'stretch/start','stretch/neck_tilt','stretch/shoulder_roll','stretch/torso_twist',
+        'stretch/hip_glute','stretch/leg_extension','stretch/spinal_twist','stretch/deep_breath'];
+      assert.equal(await run(`Promise.all(${JSON.stringify(files)}.map(file => new Promise((resolve,reject) => {
+        const img = new Image(); img.onload = () => resolve(true); img.onerror = reject;
+        img.src = '../../assets/characters/${characters[i]}/' + file + '.png';
+      }))).then(values => values.every(Boolean))`), true);
+    }
+    await new Promise(resolve => { win.webContents.once('did-finish-load', resolve); win.webContents.reload(); });
+    await waitFor(() => run(`document.getElementById('pet')?.dataset.character === 'godmiyo'`), 'saved character restored');
+    console.log('PASS: right-click menu, four character asset sets and persisted selection on reload');
+    win.webContents.send('force-stretch');
+    await waitFor(() => visible('stretch-panel'), 'stretch starts');
+    const pose = await run(`document.getElementById('stretch-name').textContent`);
+    await chooseCharacter(0);
+    assert.equal(await run(`document.getElementById('stretch-name').textContent`), pose);
+    assert.equal(await run(`document.getElementById('pet').src.includes('/miyo/stretch/')`), true);
+    assert.equal(await run(`window.petAPI.getMinutesUntilNextStretch()`), null);
+    await run(`document.getElementById('stretch-skip').click();`);
+    console.log('PASS: character changes during stretch preserve pose and timer');
     // Accelerate only new routine intervals, preserving the production control flow.
     await run(`window.originalInterval = window.setInterval; window.setInterval = (fn, ms, ...args) => window.originalInterval(fn, ms === 1000 ? 10 : ms, ...args); undefined;`);
     win.webContents.send('show-settings-panel', 25);

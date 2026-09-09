@@ -4,6 +4,7 @@ export interface PetSettings {
   soundEnabled: boolean;
   autoStart: boolean;
   pinned: boolean;
+  character: 'miyo' | 'miyox' | 'deodeumiyo' | 'godmiyo';
 }
 
 declare global {
@@ -22,6 +23,7 @@ declare global {
       onShowSettingsPanel(callback: (focusMinutes: number) => void): void;
       setFocusMinutes(minutes: number): void;
       getMinutesUntilNextStretch(): Promise<number | null>;
+      onCharacterChanged(callback: (character: PetSettings['character']) => void): void;
       onPinnedChanged(callback: (pinned: boolean) => void): void;
     };
   }

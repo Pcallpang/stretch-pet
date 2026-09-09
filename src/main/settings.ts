@@ -6,6 +6,7 @@ export interface PetSettings {
   soundEnabled: boolean;
   autoStart: boolean;
   pinned: boolean;
+  character: 'miyo' | 'miyox' | 'deodeumiyo' | 'godmiyo';
 }
 
 export const DEFAULT_SETTINGS: PetSettings = {
@@ -14,10 +15,13 @@ export const DEFAULT_SETTINGS: PetSettings = {
   soundEnabled: false,
   autoStart: false,
   pinned: false,
+  character: 'miyox',
 };
 
 export function clampSettings(settings: Partial<PetSettings>): PetSettings {
   return {
+    character: ['miyo', 'miyox', 'deodeumiyo', 'godmiyo'].includes(settings.character as string)
+      ? settings.character! : DEFAULT_SETTINGS.character,
     focusMinutes:
       Number.isFinite(settings.focusMinutes) && typeof settings.focusMinutes === 'number' && settings.focusMinutes > 0
         ? Math.min(180, Math.max(5, Math.round(settings.focusMinutes)))

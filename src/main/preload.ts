@@ -37,6 +37,9 @@ contextBridge.exposeInMainWorld('petAPI', {
   },
   getMinutesUntilNextStretch: (): Promise<number | null> =>
     ipcRenderer.invoke('get-minutes-until-next-stretch'),
+  onCharacterChanged: (callback: (character: string) => void): void => {
+    ipcRenderer.on('character-changed', (_event, character: string) => callback(character));
+  },
   onPinnedChanged: (callback: (pinned: boolean) => void): void => {
     ipcRenderer.on('pinned-changed', (_event, pinned: boolean) => callback(pinned));
   },

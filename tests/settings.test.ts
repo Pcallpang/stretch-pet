@@ -19,6 +19,7 @@ describe('clampSettings', () => {
       soundEnabled: true,
       autoStart: false,
       pinned: false,
+      character: 'miyox',
     });
   });
 
@@ -39,5 +40,15 @@ describe('invalid persisted settings', () => {
     expect(clampSettings({ focusMinutes: 999 }).focusMinutes).toBe(180);
     expect(clampSettings({ focusMinutes: 1 }).focusMinutes).toBe(5);
     expect(clampSettings({ focusMinutes: 25.6 }).focusMinutes).toBe(26);
+  });
+});
+
+ describe('character settings', () => {
+  it('preserves each supported character and migrates old or invalid settings', () => {
+    for (const character of ['miyo', 'miyox', 'deodeumiyo', 'godmiyo'] as const) {
+      expect(clampSettings({ character }).character).toBe(character);
+    }
+    expect(clampSettings({}).character).toBe('miyox');
+    expect(clampSettings({ character: '../../oops' } as any).character).toBe('miyox');
   });
 });

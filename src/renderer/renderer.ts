@@ -12,12 +12,25 @@ import {
   computeOverlayPosition,
 } from './petPosition.js';
 
-const ASSET_BASE = '../../assets';
+const ASSET_BASE = '';
+let character = 'miyox';
+let currentFrame = '/idle/1.png';
+function showFrame(frame: string): void {
+  currentFrame = frame;
+  petEl.src = `../../assets/characters/${character}${frame}`;
+}
+function changeCharacter(next: string): void {
+  if (!['miyo', 'miyox', 'deodeumiyo', 'godmiyo'].includes(next)) return;
+  character = next;
+  petEl.dataset.character = character;
+  petEl.alt = ({ miyo: '미요', miyox: '미요X', deodeumiyo: '더드미요', godmiyo: '갓미요' } as Record<string, string>)[character];
+  showFrame(currentFrame);
+}
 const PET_SIZE = 96;
 const OVERLAY_GAP = 12;
 
 const IDLE_FRAMES = [`${ASSET_BASE}/idle/1.png`, `${ASSET_BASE}/idle/2.png`];
-const WALK_FRAMES = [1, 2, 3, 4, 5].map((n) => `${ASSET_BASE}/walk/${n}.png`);
+const WALK_FRAMES = [1, 2, 3, 4].map((n) => `${ASSET_BASE}/walk/${n}.png`);
 
 interface StretchStep {
   name: string;
@@ -79,8 +92,8 @@ const settingsMinutesInput = document.getElementById('settings-minutes-input') a
 const settingsConfirmButton = document.getElementById('settings-confirm') as HTMLButtonElement;
 const settingsCancelButton = document.getElementById('settings-cancel') as HTMLButtonElement;
 
-const idleAnimator = new SpriteAnimator(IDLE_FRAMES, 1, (src) => { petEl.src = src; });
-const walkAnimator = new SpriteAnimator(WALK_FRAMES, 6, (src) => { petEl.src = src; });
+const idleAnimator = new SpriteAnimator(IDLE_FRAMES, 1, (src) => { showFrame(src); });
+const walkAnimator = new SpriteAnimator(WALK_FRAMES, 6, (src) => { showFrame(src); });
 
 let walkInterval: ReturnType<typeof setInterval> | null = null;
 let countdownInterval: ReturnType<typeof setInterval> | null = null;
@@ -232,7 +245,7 @@ function runStretchStep(): void {
   const step = STRETCH_STEPS[stretchStepIndex];
   nameEl.textContent = step.name;
   stretchDialogueEl.textContent = pickDialogue(step.dialogueKey);
-  petEl.src = step.spriteSrc;
+  showFrame(step.spriteSrc);
   petEl.classList.toggle('facing-left', step.flip);
   positionOverlay(panelEl, -40);
   let remaining = step.seconds;
@@ -418,6 +431,7 @@ window.petAPI.onCooldownElapsed(() => fire('cooldown_elapsed'));
 window.petAPI.onAlertTimeout(() => fire('alert_timeout'));
 window.petAPI.onForceStretch(() => fire('force_start_stretch'));
 window.petAPI.onShowSettingsPanel((focusMinutes) => showSettingsPanel(focusMinutes));
+window.petAPI.onCharacterChanged(changeCharacter);
 window.petAPI.onPinnedChanged((next) => {
   pinned = next;
   // Pinning while the pet happens to be mid-walk should stop it immediately
@@ -441,4 +455,4 @@ petY = window.innerHeight - 40 - PET_SIZE;
 applyPetPosition();
 window.petAPI.setIgnoreMouseEvents(true);
 onStateEnter('idle');
-window.petAPI.getSettings().then((settings) => { pinned = settings.pinned; });
+window.petAPI.getSettings().then((settings) => { pinned = settings.pinned; changeCharacter(settings.character); });

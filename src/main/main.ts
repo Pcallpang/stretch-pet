@@ -2,6 +2,7 @@ import { app, BrowserWindow, screen, ipcMain, Menu } from 'electron';
 import * as path from 'path';
 import { TimerScheduler, minutesToMs } from './timerScheduler';
 import { getSettings, setSettings } from './settings';
+import type { PetSettings } from './settings';
 import { createTray, refreshTray } from './tray';
 import { clampFocusMinutes, computeMinutesUntilNextStretch } from './nextStretch';
 
@@ -158,6 +159,21 @@ ipcMain.on('show-pet-context-menu', () => {
       },
     },
     { type: 'separator' },
+    {
+      label: '캐릭터 변경',
+      submenu: ([
+        ['miyo', '미요'], ['miyox', '미요X (사춘기)'],
+        ['deodeumiyo', '더드미요'], ['godmiyo', '갓미요'],
+      ] as const).map(([character, label]) => ({
+        label,
+        type: 'radio' as const,
+        checked: getSettings().character === character,
+        click: () => {
+          const settings = setSettings({ character: character as PetSettings['character'] });
+          mainWindow?.webContents.send('character-changed', settings.character);
+        },
+      })),
+    },
     {
       label: '고정하기',
       type: 'checkbox',
