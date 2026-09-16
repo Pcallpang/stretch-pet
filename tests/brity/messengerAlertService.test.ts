@@ -166,6 +166,65 @@ describe('MessengerAlertService', () => {
     expect(getQueue()).toEqual(items.slice(1)); // 401난 2번 + 시도조차 안 한 3·4·5번
   });
 
+  it('flush 도중 토큰이 다른 계정 것으로 바뀌면 마지막 저장을 건너뛴다', async () => {
+    // 전송에 타임아웃이 없어 A가 로그아웃하고 B가 로그인할 시간이 생긴다.
+    // 토큰이 null이 아니라 "다른 값"으로 바뀌는 경우 — null 검사로는 못 잡는다.
+    const items = [{ msg: { sender: null, receivedAt: 'a', body: 'A선생님 쪽지' }, firstSeenAt: 500 }];
+    let token: string | null = 'teacher-A-token';
+    let saved: any[] | null = null;
+    const { service } = makeService({
+      loadQueue: () => items,
+      saveQueue: (q: any[]) => { saved = q; },
+      getToken: () => token,
+      sendFn: vi.fn().mockImplementation(async () => {
+        token = 'teacher-B-token'; // A 로그아웃 → B 로그인이 전송 대기 중에 끝났다
+        return { ok: false, needsLogin: false, error: '네트워크 오류' };
+      }),
+    });
+    await service.flushRetryQueue();
+    expect(saved).toBeNull(); // A의 쪽지가 B의 큐 파일로 되살아나지 않았다
+  });
+
+  it('401 시 saveQueue가 onNeedsLogin보다 먼저 일어난다(main.ts 동작 그대로 재현)', async () => {
+    // main.ts의 onNeedsLogin은 clearToken() + saveQueueFile([])를 한다.
+    // 서비스가 saveQueue와 onNeedsLogin의 순서를 뒤바꾸면
+    //   ① 세션 검사가 401을 "세션 교체"로 오인하거나
+    //   ② 비워진 큐 파일 위에 remaining이 다시 쓰여 이전 계정 쪽지가 되살아난다.
+    // 이 테스트는 두 문장의 순서를 고정한다.
+    const items = [1, 2, 3, 4, 5].map((n) => ({
+      msg: { sender: null, receivedAt: `r${n}`, body: `쪽지${n}` },
+      firstSeenAt: 500,
+    }));
+    let token: string | null = 'fake-token';
+    let queueFile: any[] = items;
+    const events: string[] = [];
+    const onNeedsLogin = vi.fn(() => {
+      events.push('onNeedsLogin');
+      token = null; // main.ts: clearToken()
+      queueFile = []; // main.ts: saveQueueFile([]) — 세션이 죽으면 큐도 비운다
+    });
+    const sendFn = vi.fn().mockImplementation(async (_t: string, msg: any) =>
+      msg.body === '쪽지1'
+        ? { ok: true, stored: true }
+        : { ok: false, needsLogin: true, error: '다시 로그인해 주세요.' },
+    );
+    const { service } = makeService({
+      loadQueue: () => queueFile,
+      saveQueue: (q: any[]) => { events.push(`saveQueue:${q.length}`); queueFile = q; },
+      getToken: () => token,
+      sendFn,
+      onNeedsLogin,
+    });
+    await service.flushRetryQueue();
+    expect(onNeedsLogin).toHaveBeenCalledTimes(1);
+    // 401난 2번 + 시도조차 못 한 3·4·5번이 먼저 저장되고, 그 다음에 콜백이 불렸다.
+    expect(events).toEqual(['saveQueue:4', 'onNeedsLogin']);
+    expect(token).toBeNull();
+    // main.ts가 세션 사망 처리로 큐를 비웠으므로 최종 큐 파일은 비어 있다 —
+    // 이전 선생님 쪽지가 남아 다음 로그인 계정으로 올라가지 않는다.
+    expect(queueFile).toEqual([]);
+  });
+
   it('stop 이후에는 더 이상 새 쪽지를 처리하지 않는다', async () => {
     const { service, reader, onNewAlert } = makeService();
     service.start();

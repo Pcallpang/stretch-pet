@@ -61,6 +61,11 @@ const messengerAlertService = new MessengerAlertService({
     // 사용자 모르게 계속 돌거나 바로 또 401을 맞지 않는다.
     clearToken();
     setSettings({ messengerAlertEnabled: false });
+    // 세션이 죽은 것은 로그아웃과 똑같이 취급한다 — 남은 쪽지를 그대로 두면
+    // 같은 PC에 다음 선생님이 로그인했을 때 이전 사용자의 쪽지가 그 계정 플래너로
+    // 올라간다. 세션 만료로 아직 못 보낸 쪽지를 잃는 손해는 감수한다(의도된 선택,
+    // 명시적 로그아웃에서 이미 받아들인 것과 동일한 절충).
+    saveQueueFile([]);
     syncMessengerAlertRunning();
     refreshTray();
   },

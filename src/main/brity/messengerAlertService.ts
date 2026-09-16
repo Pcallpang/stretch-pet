@@ -111,13 +111,20 @@ export class MessengerAlertService {
         }
         remaining.push(item); // 실패했으니 큐에 남긴다
       }
-      // 느린 전송을 기다리는 사이에 사용자가 로그아웃했다면(로그아웃은 토큰을 지우고
-      // 큐 파일을 비운다) 여기서 remaining을 쓰면 이전 계정의 쪽지가 되살아나
-      // 다음 사용자의 플래너로 올라간다 — 세션이 바뀌었으면 저장을 건너뛴다.
-      if (this.deps.getToken() === null) return;
+      // 느린 전송을 기다리는 사이에 세션이 바뀌었을 수 있다. sendFn에는 타임아웃이
+      // 없어서 한 번의 전송이 몇 분씩 걸릴 수 있고, 그 사이에 A 선생님이 로그아웃하고
+      // B 선생님이 로그인하는 것도 충분히 가능하다. null 검사만으로는 이 A→B 교체를
+      // 잡지 못한다(B의 토큰이 있으니 통과해버린다) — 그래서 "지금 토큰이 이 flush가
+      // 시작할 때 잡아둔 토큰과 동일한가"를 본다. 동일성 비교 하나로 로그아웃 후 방치,
+      // 로그아웃 후 재로그인, A→B 직접 교체가 모두 걸러진다. 다르면 remaining을 쓰지
+      // 않고 빠져나가야 이전 계정의 쪽지가 되살아나 다음 사용자의 플래너로 올라가지 않는다.
+      if (this.deps.getToken() !== token) return;
       this.deps.saveQueue(remaining);
-      // onNeedsLogin은 토큰을 지우므로(main.ts) 위 세션 검사 뒤에 호출해야
-      // 정상적인 401 처리가 "로그아웃"으로 오인되지 않는다.
+      // onNeedsLogin은 반드시 위 세션 검사와 saveQueue "뒤에" 호출한다. main.ts의
+      // onNeedsLogin은 토큰을 지우고 큐 파일도 비우기 때문에, 먼저 부르면
+      // ① 정상적인 401이 "세션 교체"로 오인돼 남은 큐가 통째로 버려지고
+      // ② 비운 큐 파일 위에 remaining이 다시 쓰여 이전 계정 쪽지가 되살아난다.
+      // 이 순서는 계약이다 — 바꾸지 말 것.
       if (needsLogin) this.deps.onNeedsLogin();
     } finally {
       this.flushing = false;
