@@ -9,7 +9,12 @@ interface TrayCallbacks {
   onMessengerAlertLogin: () => void;
   onMessengerAlertLogout: () => void;
   onMessengerAlertToggle: (enabled: boolean) => void;
-  onTriggerTestMessage: () => void;
+  onClearUnread: () => void;
+  /**
+   * 개발용 테스트 쪽지 트리거. 실제 BrityReader 구현에는 없는 기능이라 선택 사항이며,
+   * 넘겨준 경우에만 트레이 메뉴에 "테스트 쪽지 보내기 (개발용)" 항목이 나타난다.
+   */
+  onTriggerTestMessage?: () => void;
   getUnreadCount: () => number;
 }
 
@@ -100,7 +105,10 @@ function rebuildMenu(callbacks: TrayCallbacks): void {
       enabled: Boolean(loadToken()),
       click: (menuItem) => callbacks.onMessengerAlertToggle(menuItem.checked),
     },
-    ...(settings.messengerAlertEnabled
+    ...(callbacks.getUnreadCount() > 0
+      ? [{ label: '확인 대기 건수 지우기', click: callbacks.onClearUnread }]
+      : []),
+    ...(settings.messengerAlertEnabled && callbacks.onTriggerTestMessage
       ? [{ label: '테스트 쪽지 보내기 (개발용)', click: callbacks.onTriggerTestMessage }]
       : []),
     { type: 'separator' },

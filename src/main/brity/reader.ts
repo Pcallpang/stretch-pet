@@ -11,6 +11,11 @@ export interface BrityMessage {
  * 그때 손댈 필요가 없다.
  */
 export interface BrityReader {
+  /**
+   * 감시를 시작한다. 구현체는 `start`/`stop`이 여러 번 반복 호출돼도 안전해야 한다
+   * (이미 시작된 상태에서 다시 `start`가 불려도 감시기를 중복 생성하지 않고,
+   * 이미 멈춘 상태에서 `stop`이 불려도 오류 없이 넘어가야 한다).
+   */
   start(onMessage: (msg: BrityMessage) => void): void;
   stop(): void;
 }

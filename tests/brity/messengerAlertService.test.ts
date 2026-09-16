@@ -14,6 +14,7 @@ function makeService(overrides: Partial<ConstructorParameters<typeof MessengerAl
     loadQueue: () => queue,
     saveQueue: (q: any[]) => { queue = q; },
     now: () => 1000,
+    isEnabled: () => true,
     onNewAlert,
     onNeedsLogin,
     ...overrides,

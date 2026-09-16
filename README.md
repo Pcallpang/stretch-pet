@@ -38,7 +38,8 @@
    보여줍니다. 이 항목은 아래 "지금 한계" 항목에서 설명하듯 실제 브리티 쪽지 대신 테스트용으로
    동작을 확인하는 용도입니다.
 4. 확인하지 않은 쪽지가 있으면 트레이 아이콘에 마우스를 올렸을 때 "확인 대기 N건"으로 표시되고,
-   메뉴의 "메신저 알리미: 켜짐" 항목에도 대기 건수가 같이 표시됩니다.
+   메뉴의 "메신저 알리미: 켜짐" 항목에도 대기 건수가 같이 표시됩니다. 다 확인했으면
+   트레이 메뉴의 "확인 대기 건수 지우기"로 0으로 되돌릴 수 있습니다.
 
 ### 지금 한계 — 실제 브리티 쪽지는 아직 읽지 않습니다
 
@@ -56,7 +57,8 @@
   바꿔치기만 하면 됩니다.
 
 그 외 코드(말풍선 표시, 서버 전송, 재시도 큐 등)는 이 인터페이스만 보고 동작하므로 **전혀
-손댈 필요가 없습니다.**
+손댈 필요가 없습니다.** "테스트 쪽지 보내기 (개발용)" 메뉴 항목은 리더가
+`triggerTestMessage()`를 가진 경우에만 나타나므로, 실제 리더로 바꾸면 자동으로 사라집니다.
 
 ---
 
@@ -66,12 +68,30 @@
 아래 두 곳 중 하나에서 읽어옵니다. 개발 중에 설정한 값이 있으면 그 값이 우선 적용되고,
 없으면 프로그램에 미리 구워둔 배포용 기본값을 씁니다.
 
-1. **개발용 — `.env` 파일** (저장소에는 `.env.example`만 있고 `.env`는 각자 만들어 씁니다)
+1. **개발용 — 환경변수** (`MIYO_SERVER_URL`, `MIYO_GOOGLE_DESKTOP_CLIENT_ID`)
 
+   프로그램은 `.env` 파일을 읽지 않습니다(dotenv를 쓰지 않습니다). 아래처럼 실제
+   환경변수를 설정한 터미널에서 실행해야 값이 적용됩니다. 값 예시는 저장소의
+   `.env.example`에 정리해 두었습니다.
+
+   윈도우 PowerShell (이번 실행에만 적용):
+
+   ```powershell
+   $env:MIYO_SERVER_URL = "http://localhost:3001"
+   $env:MIYO_GOOGLE_DESKTOP_CLIENT_ID = "여기에-클라이언트-ID"
+   npm start
    ```
-   MIYO_SERVER_URL=http://localhost:3001
-   MIYO_GOOGLE_DESKTOP_CLIENT_ID=
+
+   윈도우 cmd.exe:
+
+   ```bat
+   set MIYO_SERVER_URL=http://localhost:3001
+   set MIYO_GOOGLE_DESKTOP_CLIENT_ID=여기에-클라이언트-ID
+   npm start
    ```
+
+   계정에 영구 저장하려면 `setx MIYO_SERVER_URL "http://localhost:3001"`처럼 하고
+   터미널을 새로 엽니다.
 
 2. **배포용 — `package.json`의 `miyoConfig`** (설치 파일을 만들 때 이 값이 함께 포함됩니다)
 
@@ -109,4 +129,8 @@
 2. `src/main/main.ts`에서 `createFakeBrityReader()` 호출 한 줄을 새 구현으로 바꿉니다.
 3. 그 외 파일(`ingestClient.ts`, `retryQueue.ts`, `messengerAlertService.ts`, `tray.ts` 등)은
    전부 `BrityReader` 인터페이스와 `BrityMessage` 타입만 보고 동작하므로 수정할 필요가
-   없습니다.
+   없습니다. `main.ts`의 `brityReader` 변수 타입도 `BrityReader`이고, 개발용
+   `triggerTestMessage()`는 런타임에 있는지 확인해서 있을 때만 트레이에 연결하므로,
+   `BrityReader`만 구현한 실제 리더를 넣어도 컴파일·실행이 그대로 됩니다.
+4. 구현체는 `start()`/`stop()`이 반복 호출돼도 안전해야 합니다(감시기 중복 생성 금지).
+   서비스 쪽에서도 중복 호출을 막지만, 인터페이스 규약으로도 요구합니다.

@@ -6,6 +6,7 @@ import type { PetSettings } from './settings';
 import { createTray, refreshTray } from './tray';
 import { clampFocusMinutes, computeMinutesUntilNextStretch } from './nextStretch';
 import { MessengerAlertService } from './brity/messengerAlertService';
+import type { BrityReader } from './brity/reader';
 import { createFakeBrityReader } from './brity/fakeReader';
 import { sendMessengerAlert } from './brity/ingestClient';
 import { loadQueueFile, saveQueueFile } from './brity/retryQueue';
@@ -33,7 +34,16 @@ let focusDeadline: number | null = null;
 let cooldownDeadline: number | null = null;
 let phase: 'focus' | 'alert' | 'stretch' | 'cooldown' = 'focus';
 
-const brityReader = createFakeBrityReader();
+// 실제 브리티 리더가 준비되면 이 한 줄만 새 구현으로 바꾸면 된다 — 타입은
+// BrityReader로만 다루고, 개발용 테스트 트리거는 아래에서 런타임으로 확인한다.
+const brityReader: BrityReader = createFakeBrityReader();
+
+/** 리더가 개발용 테스트 트리거를 제공하면 그 함수를, 아니면 undefined를 준다. */
+function testMessageTrigger(reader: BrityReader): (() => void) | undefined {
+  const candidate = (reader as Partial<{ triggerTestMessage: () => void }>).triggerTestMessage;
+  return typeof candidate === 'function' ? () => candidate.call(reader) : undefined;
+}
+
 const messengerAlertService = new MessengerAlertService({
   reader: brityReader,
   sendFn: sendMessengerAlert,
@@ -41,15 +51,23 @@ const messengerAlertService = new MessengerAlertService({
   loadQueue: () => loadQueueFile(),
   saveQueue: (q) => saveQueueFile(q),
   now: () => Date.now(),
+  isEnabled: () => getSettings().messengerAlertEnabled,
   onNewAlert: (count) => {
     mainWindow?.webContents.send('messenger-alert-new', count);
     refreshTray();
   },
   onNeedsLogin: () => {
+    // 401이면 토큰이 죽은 것이다 — 토큰을 지우고 감시도 실제로 멈춰야
+    // 사용자 모르게 계속 돌거나 바로 또 401을 맞지 않는다.
+    clearToken();
     setSettings({ messengerAlertEnabled: false });
+    syncMessengerAlertRunning();
     refreshTray();
   },
 });
+
+let loginInProgress = false;
+let flushIntervalId: NodeJS.Timeout | null = null;
 
 /** 로그인 상태 + 켜짐 상태일 때만 실제로 감시를 시작한다. */
 function syncMessengerAlertRunning(): void {
@@ -155,46 +173,72 @@ app.whenReady().then(() => {
       onFocusMinutesChange: updateFocusMinutes,
       getUnreadCount: () => messengerAlertService.getUnreadCount(),
       onMessengerAlertLogin: async () => {
+        // 두 번 누르면 루프백 서버·브라우저 탭이 두 개 열리고, 먼저 연 쪽이
+        // 60초 뒤 "로그인 시간 초과" 오류창을 띄운다 — 진행 중이면 무시한다.
+        if (loginInProgress) {
+          dialog.showMessageBox({
+            type: 'info',
+            title: '로그인 진행 중',
+            message: '이미 로그인 창이 열려 있습니다. 브라우저에서 로그인을 마쳐 주세요.',
+          }).catch(() => { /* 안내창 실패는 무시 */ });
+          return;
+        }
+        loginInProgress = true;
         try {
           await brityLogin();
           syncMessengerAlertRunning();
           refreshTray();
         } catch (e) {
           dialog.showErrorBox('로그인 실패', e instanceof Error ? e.message : '로그인에 실패했습니다.');
+        } finally {
+          loginInProgress = false;
         }
       },
       onMessengerAlertLogout: () => {
         clearToken();
         setSettings({ messengerAlertEnabled: false });
+        // 아직 못 보낸 쪽지를 남겨두면, 같은 PC에 다른 선생님 계정이 로그인했을 때
+        // 이전 사용자의 쪽지가 새 계정 플래너로 올라갈 수 있다 — 로그아웃 시 비운다.
+        saveQueueFile([]);
         syncMessengerAlertRunning();
         refreshTray();
       },
       onMessengerAlertToggle: async (nextEnabled: boolean) => {
-        if (nextEnabled && !loadToken()) {
-          dialog.showErrorBox('로그인이 필요합니다', '먼저 미요플래너 계정으로 로그인해 주세요.');
-          refreshTray();
-          return;
-        }
-        if (nextEnabled && !getSettings().messengerAlertConsented) {
-          const { response } = await dialog.showMessageBox({
-            type: 'question',
-            buttons: ['취소', '동의하고 켜기'],
-            defaultId: 1,
-            cancelId: 0,
-            title: '메신저 알리미 켜기',
-            message: '브리티 쪽지 내용이 요약을 위해 외부 AI(Gemini)로 전송됩니다. 계속할까요?',
-          });
-          if (response !== 1) {
+        try {
+          if (nextEnabled && !loadToken()) {
+            dialog.showErrorBox('로그인이 필요합니다', '먼저 미요플래너 계정으로 로그인해 주세요.');
             refreshTray();
             return;
           }
-          setSettings({ messengerAlertConsented: true });
+          if (nextEnabled && !getSettings().messengerAlertConsented) {
+            const { response } = await dialog.showMessageBox({
+              type: 'question',
+              buttons: ['취소', '동의하고 켜기'],
+              defaultId: 1,
+              cancelId: 0,
+              title: '메신저 알리미 켜기',
+              message: '브리티 쪽지 내용이 요약을 위해 외부 AI(Gemini)로 전송됩니다. 계속할까요?',
+            });
+            if (response !== 1) {
+              refreshTray();
+              return;
+            }
+            setSettings({ messengerAlertConsented: true });
+          }
+          setSettings({ messengerAlertEnabled: nextEnabled });
+          syncMessengerAlertRunning();
+          refreshTray();
+        } catch (e) {
+          // 트레이 클릭에서 시작된 비동기 흐름이라 여기서 잡지 않으면
+          // 처리되지 않은 프라미스 거부가 된다.
+          dialog.showErrorBox('메신저 알리미 설정 실패', e instanceof Error ? e.message : '설정을 바꾸지 못했습니다.');
         }
-        setSettings({ messengerAlertEnabled: nextEnabled });
-        syncMessengerAlertRunning();
+      },
+      onClearUnread: () => {
+        messengerAlertService.resetUnreadCount();
         refreshTray();
       },
-      onTriggerTestMessage: () => brityReader.triggerTestMessage(),
+      onTriggerTestMessage: testMessageTrigger(brityReader),
     });
   } catch (err) {
     // Tray creation can throw on Windows if the icon image fails to load
@@ -215,7 +259,7 @@ app.whenReady().then(() => {
   try {
     syncMessengerAlertRunning();
     void messengerAlertService.flushRetryQueue();
-    setInterval(() => void messengerAlertService.flushRetryQueue(), 5 * 60 * 1000);
+    flushIntervalId = setInterval(() => void messengerAlertService.flushRetryQueue(), 5 * 60 * 1000);
   } catch (err) {
     console.error('[stretch-pet] failed to start messenger alert service:', err);
   }
@@ -307,29 +351,17 @@ ipcMain.handle('get-minutes-until-next-stretch', () => {
   });
 });
 
-ipcMain.handle('messenger-alert-login', async () => {
-  try {
-    const result = await brityLogin();
-    return { ok: true, email: result.user.email };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : '로그인에 실패했습니다.' };
-  }
-});
-
-ipcMain.handle('messenger-alert-status', () => {
-  const settings = getSettings();
-  return {
-    loggedIn: Boolean(loadToken()),
-    enabled: settings.messengerAlertEnabled,
-    unreadCount: messengerAlertService.getUnreadCount(),
-  };
-});
-
 app.on('window-all-closed', () => {
   // no-op: keep running in the tray even if the overlay window closes
 });
 
-app.on('before-quit', cancelTimers);
+app.on('before-quit', () => {
+  cancelTimers();
+  if (flushIntervalId) {
+    clearInterval(flushIntervalId);
+    flushIntervalId = null;
+  }
+});
 app.whenReady().then(() => screen.on('display-metrics-changed', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setBounds(screen.getPrimaryDisplay().workArea);
