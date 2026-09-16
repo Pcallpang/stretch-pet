@@ -46,7 +46,6 @@ export class MessengerAlertService {
       return;
     }
     const result = await this.deps.sendFn(token, msg);
-    if (!this.running) return; // stop() 이후 도착한 응답은 반영하지 않는다
     if (result.ok) {
       if (result.stored) {
         this.unreadCount += 1;
