@@ -43,4 +43,7 @@ contextBridge.exposeInMainWorld('petAPI', {
   onPinnedChanged: (callback: (pinned: boolean) => void): void => {
     ipcRenderer.on('pinned-changed', (_event, pinned: boolean) => callback(pinned));
   },
+  onMessengerAlertNew: (callback: (count: number) => void): void => {
+    ipcRenderer.on('messenger-alert-new', (_event, count: number) => callback(count));
+  },
 });

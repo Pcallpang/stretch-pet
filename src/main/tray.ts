@@ -1,10 +1,16 @@
 import { Tray, Menu, app, nativeImage } from 'electron';
 import * as path from 'path';
 import { getSettings, setSettings } from './settings';
+import { loadToken } from './brity/auth';
 
 interface TrayCallbacks {
   onQuit: () => void;
   onFocusMinutesChange: (minutes: number) => void;
+  onMessengerAlertLogin: () => void;
+  onMessengerAlertLogout: () => void;
+  onMessengerAlertToggle: (enabled: boolean) => void;
+  onTriggerTestMessage: () => void;
+  getUnreadCount: () => number;
 }
 
 let tray: Tray | null = null;
@@ -81,8 +87,27 @@ function rebuildMenu(callbacks: TrayCallbacks): void {
       },
     },
     { type: 'separator' },
+    {
+      label: loadToken() ? '미요플래너 로그아웃' : '미요플래너 로그인',
+      click: loadToken() ? callbacks.onMessengerAlertLogout : callbacks.onMessengerAlertLogin,
+    },
+    {
+      label: settings.messengerAlertEnabled
+        ? `메신저 알리미: 켜짐${callbacks.getUnreadCount() > 0 ? ` (확인 대기 ${callbacks.getUnreadCount()}건)` : ''}`
+        : '메신저 알리미: 꺼짐',
+      type: 'checkbox',
+      checked: settings.messengerAlertEnabled,
+      enabled: Boolean(loadToken()),
+      click: (menuItem) => callbacks.onMessengerAlertToggle(menuItem.checked),
+    },
+    ...(settings.messengerAlertEnabled
+      ? [{ label: '테스트 쪽지 보내기 (개발용)', click: callbacks.onTriggerTestMessage }]
+      : []),
+    { type: 'separator' },
     { label: '종료', click: callbacks.onQuit },
   ]);
 
+  const unread = callbacks.getUnreadCount();
+  tray.setToolTip(unread > 0 ? `스트레칭펫 · 확인 대기 ${unread}건` : '스트레칭펫');
   tray.setContextMenu(menu);
 }

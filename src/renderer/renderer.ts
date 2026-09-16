@@ -438,6 +438,14 @@ window.petAPI.onPinnedChanged((next) => {
   // rather than waiting for it to reach the edge of its current stroll.
   if (pinned && state === 'walk') fire('wander_pause');
 });
+window.petAPI.onMessengerAlertNew((count) => {
+  if (state !== 'idle' && state !== 'walk' && state !== 'cooldown') return; // alert/stretch 중엔 방해하지 않는다
+  showBubble(count > 1 ? '새로운 대화가 있어요!' : '새로운 쪽지가 있어요!');
+  const token = bubbleToken;
+  setTimeout(() => {
+    if (bubbleToken === token) hideBubble();
+  }, 5000);
+});
 
 setInterval(() => {
   if (isDragging || pinned || !settingsPanelEl.classList.contains('hidden')) return;

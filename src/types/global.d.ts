@@ -25,6 +25,7 @@ declare global {
       getMinutesUntilNextStretch(): Promise<number | null>;
       onCharacterChanged(callback: (character: PetSettings['character']) => void): void;
       onPinnedChanged(callback: (pinned: boolean) => void): void;
+      onMessengerAlertNew(callback: (count: number) => void): void;
     };
   }
 }
