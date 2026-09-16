@@ -95,6 +95,77 @@ describe('MessengerAlertService', () => {
     expect(getQueue()).toHaveLength(0);
   });
 
+  it('기능이 꺼져 있으면 전송하지 않지만 만료 정리는 저장한다', async () => {
+    const oldItem = { msg: { sender: null, receivedAt: 'x', body: '만료됨' }, firstSeenAt: 0 };
+    const freshItem = { msg: { sender: null, receivedAt: 'y', body: '아직 살아있음' }, firstSeenAt: 8 * 24 * 60 * 60 * 1000 };
+    const { service, deps, getQueue } = makeService({
+      isEnabled: () => false,
+      loadQueue: () => [oldItem, freshItem],
+      now: () => 8 * 24 * 60 * 60 * 1000, // 8일 후 — oldItem만 만료
+    });
+    await service.flushRetryQueue();
+    expect(deps.sendFn).not.toHaveBeenCalled();
+    expect(getQueue()).toEqual([freshItem]);
+  });
+
+  it('flush가 진행 중이면 두 번째 flush는 큐를 다시 훑지 않는다', async () => {
+    const items = [
+      { msg: { sender: null, receivedAt: 'a', body: '1' }, firstSeenAt: 500 },
+      { msg: { sender: null, receivedAt: 'b', body: '2' }, firstSeenAt: 500 },
+    ];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => { release = r; });
+    let first = true;
+    const sendFn = vi.fn().mockImplementation(async () => {
+      if (first) { first = false; await gate; }
+      return { ok: true, stored: true };
+    });
+    const { service, getQueue } = makeService({ loadQueue: () => items, sendFn });
+
+    const p1 = service.flushRetryQueue();
+    await Promise.resolve();
+    await service.flushRetryQueue(); // 재진입 — 아무 일도 하지 않고 끝나야 한다
+    expect(sendFn).toHaveBeenCalledTimes(1); // 두 번째 flush가 새 전송을 시작하지 않았다
+    release();
+    await p1;
+    expect(sendFn).toHaveBeenCalledTimes(2); // 첫 flush가 항목 2개를 한 번씩만 보냈다
+    expect(getQueue()).toHaveLength(0);
+  });
+
+  it('flush 도중 로그아웃(토큰 삭제)되면 마지막 저장을 건너뛰어 큐가 되살아나지 않는다', async () => {
+    const items = [{ msg: { sender: null, receivedAt: 'a', body: '이전 계정 쪽지' }, firstSeenAt: 500 }];
+    let token: string | null = 'fake-token';
+    let saved: any[] | null = null;
+    const { service } = makeService({
+      loadQueue: () => items,
+      saveQueue: (q: any[]) => { saved = q; },
+      getToken: () => token,
+      sendFn: vi.fn().mockImplementation(async () => {
+        token = null; // 전송을 기다리는 사이 사용자가 로그아웃
+        return { ok: false, needsLogin: false, error: '네트워크 오류' };
+      }),
+    });
+    await service.flushRetryQueue();
+    expect(saved).toBeNull(); // 큐 파일을 다시 쓰지 않았다
+  });
+
+  it('flush 중 401이면 onNeedsLogin을 한 번만 부르고 남은 항목을 전부 보존한다', async () => {
+    const items = [1, 2, 3, 4, 5].map((n) => ({
+      msg: { sender: null, receivedAt: `r${n}`, body: `쪽지${n}` },
+      firstSeenAt: 500,
+    }));
+    const sendFn = vi.fn().mockImplementation(async (_t: string, msg: any) =>
+      msg.body === '쪽지1'
+        ? { ok: true, stored: true }
+        : { ok: false, needsLogin: true, error: '다시 로그인해 주세요.' },
+    );
+    const { service, onNeedsLogin, getQueue } = makeService({ loadQueue: () => items, sendFn });
+    await service.flushRetryQueue();
+    expect(sendFn).toHaveBeenCalledTimes(2); // 1번 성공, 2번에서 401 → 중단
+    expect(onNeedsLogin).toHaveBeenCalledTimes(1);
+    expect(getQueue()).toEqual(items.slice(1)); // 401난 2번 + 시도조차 안 한 3·4·5번
+  });
+
   it('stop 이후에는 더 이상 새 쪽지를 처리하지 않는다', async () => {
     const { service, reader, onNewAlert } = makeService();
     service.start();

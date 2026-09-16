@@ -53,8 +53,10 @@
 
 - `src/main/brity/reader.ts`에 정의된 `BrityReader` 인터페이스(쪽지가 오면 `start`로 등록한
   콜백을 호출하고, `stop`으로 멈추는 규격)를 구현하는 새 클래스를 만들고,
-- `src/main/main.ts`에서 지금 쓰고 있는 `createFakeBrityReader()` 호출을 그 새 클래스로
-  바꿔치기만 하면 됩니다.
+- `src/main/main.ts`에서 두 줄만 바꾸면 됩니다 — 맨 위의
+  `import { createFakeBrityReader } from './brity/fakeReader';` 줄을 새 구현을 가져오는
+  import으로, 그리고 지금 쓰고 있는 `createFakeBrityReader()` 호출을 그 새 클래스로
+  바꿔치기하면 됩니다.
 
 그 외 코드(말풍선 표시, 서버 전송, 재시도 큐 등)는 이 인터페이스만 보고 동작하므로 **전혀
 손댈 필요가 없습니다.** "테스트 쪽지 보내기 (개발용)" 메뉴 항목은 리더가
@@ -126,7 +128,10 @@
    구현하는 새 클래스를 작성합니다. 윈도우 접근성(UI Automation) API로 브리티 메신저 창을
    읽는 방식을 참고할 수 있습니다 (`src/main/brity/fakeReader.ts`가 지금 이 인터페이스를
    흉내만 내는 자리표시자 구현입니다).
-2. `src/main/main.ts`에서 `createFakeBrityReader()` 호출 한 줄을 새 구현으로 바꿉니다.
+2. `src/main/main.ts`에서 두 줄을 바꿉니다: 파일 맨 위의
+   `import { createFakeBrityReader } from './brity/fakeReader';` import 줄과,
+   `const brityReader: BrityReader = createFakeBrityReader();` 호출 줄을 각각 새 구현으로
+   바꿉니다.
 3. 그 외 파일(`ingestClient.ts`, `retryQueue.ts`, `messengerAlertService.ts`, `tray.ts` 등)은
    전부 `BrityReader` 인터페이스와 `BrityMessage` 타입만 보고 동작하므로 수정할 필요가
    없습니다. `main.ts`의 `brityReader` 변수 타입도 `BrityReader`이고, 개발용
