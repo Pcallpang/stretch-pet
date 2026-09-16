@@ -65,8 +65,21 @@ export class MessengerAlertService {
       }
       return;
     }
-    if (result.needsLogin) this.deps.onNeedsLogin();
+    // 여기까지 왔다면 전송 실패다. flushRetryQueue와 똑같은 두 가지 보호를 적용한다.
+    // ① 세션 동일성 검사 — sendFn에는 타임아웃이 없어서 전송 하나가 몇 분씩 걸릴 수 있고,
+    //    그 사이에 A 선생님이 로그아웃하고 B 선생님이 로그인할 수 있다. 토큰이 이 전송을
+    //    시작할 때 잡아둔 것과 다르면 지금 큐 파일은 이미 B의 것이므로, A의 쪽지를 거기에
+    //    써 넣어서는 안 된다. onNeedsLogin도 부르지 않는다 — 이미 지나간 세션의 뒤늦은
+    //    실패가 정상적으로 다시 로그인한 B의 세션을 끊어버리면 안 된다.
+    //    (queueForRetry와 onNeedsLogin "둘 다"보다 앞에 있어야 한다.)
+    if (this.deps.getToken() !== token) return;
+    // ② 큐 저장을 콜백보다 먼저 — main.ts의 onNeedsLogin은 토큰을 지우고 큐 파일도
+    //    비운다. 콜백을 먼저 부르면 방금 비워진 파일 위에 이 쪽지가 다시 쓰여, 세션이
+    //    죽었는데도 이전 선생님 쪽지가 디스크에 살아남아 다음 사람 계정으로 올라간다.
+    //    먼저 쓰고 나중에 부르면 이 쪽지도 다른 항목들과 함께 깨끗이 지워진다
+    //    ("세션이 죽으면 큐도 비운다"는 절충과 일관). flushRetryQueue와 동일한 계약이다.
     this.queueForRetry(msg);
+    if (result.needsLogin) this.deps.onNeedsLogin();
   }
 
   private queueForRetry(msg: BrityMessage): void {

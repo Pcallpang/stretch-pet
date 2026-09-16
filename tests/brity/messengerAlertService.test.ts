@@ -63,15 +63,57 @@ describe('MessengerAlertService', () => {
     expect(getQueue()).toHaveLength(1);
   });
 
-  it('401(needsLogin)이면 onNeedsLogin을 부르고 큐에 쌓는다', async () => {
-    const { service, reader, onNeedsLogin, getQueue } = makeService({
+  it('401(needsLogin)이면 큐에 먼저 쌓고 그 다음 onNeedsLogin을 부른다 — 콜백이 큐를 비우므로 최종 큐는 비어 있다', async () => {
+    // main.ts의 onNeedsLogin은 clearToken() + saveQueueFile([])를 한다.
+    // 서비스가 콜백을 먼저 부르면 방금 비워진 큐 파일 위에 이 쪽지가 다시 쓰여
+    // 이전 선생님 쪽지가 디스크에 남는다. 이 테스트가 두 문장의 순서를 고정한다.
+    let token: string | null = 'fake-token';
+    let queueFile: any[] = [];
+    const events: string[] = [];
+    const onNeedsLogin = vi.fn(() => {
+      // 콜백이 불리는 시점에는 이 쪽지가 이미 큐에 들어가 있어야 한다.
+      events.push(`onNeedsLogin:queue=${queueFile.length}`);
+      token = null; // main.ts: clearToken()
+      queueFile = []; // main.ts: saveQueueFile([]) — 세션이 죽으면 큐도 비운다
+    });
+    const { service, reader } = makeService({
       sendFn: vi.fn().mockResolvedValue({ ok: false, needsLogin: true, error: '다시 로그인해 주세요.' }),
+      getToken: () => token,
+      loadQueue: () => queueFile,
+      saveQueue: (q: any[]) => { events.push(`saveQueue:${q.length}`); queueFile = q; },
+      onNeedsLogin,
     });
     service.start();
     reader.triggerTestMessage();
-    await new Promise((r) => setTimeout(r, 10));
+    await vi.waitFor(() => expect(onNeedsLogin).toHaveBeenCalled());
     expect(onNeedsLogin).toHaveBeenCalledTimes(1);
-    expect(getQueue()).toHaveLength(1);
+    expect(events).toEqual(['saveQueue:1', 'onNeedsLogin:queue=1']);
+    expect(token).toBeNull();
+    // 세션 사망 처리로 큐가 비워졌으므로 최종 큐 파일은 비어 있다 —
+    // 이 쪽지가 콜백 "뒤에" 쓰여 살아남는 일이 없다.
+    expect(queueFile).toEqual([]);
+  });
+
+  it('새 쪽지 전송 대기 중 토큰이 다른 계정 것으로 바뀌면 큐에 쓰지도, onNeedsLogin을 부르지도 않는다', async () => {
+    // 전송에 타임아웃이 없어 A가 로그아웃하고 B가 로그인할 시간이 생긴다.
+    // 뒤늦게 도착한 A의 전송 실패가 B의 큐 파일에 A의 쪽지를 섞어 넣으면 안 된다.
+    let token: string | null = 'teacher-A-token';
+    let saved: any[] | null = null;
+    const sendFn = vi.fn().mockImplementation(async () => {
+      token = 'teacher-B-token'; // A 로그아웃 → B 로그인이 전송 대기 중에 끝났다
+      return { ok: false, needsLogin: false, error: '네트워크 오류' };
+    });
+    const { service, reader, onNeedsLogin } = makeService({
+      getToken: () => token,
+      saveQueue: (q: any[]) => { saved = q; },
+      sendFn,
+    });
+    service.start();
+    reader.triggerTestMessage();
+    await vi.waitFor(() => expect(sendFn).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 10));
+    expect(saved).toBeNull(); // B의 큐 파일을 건드리지 않았다
+    expect(onNeedsLogin).not.toHaveBeenCalled(); // B의 새 세션을 흔들지도 않았다
   });
 
   it('flushRetryQueue는 큐에 있던 항목을 다시 보내고, 성공하면 큐에서 지운다', async () => {
