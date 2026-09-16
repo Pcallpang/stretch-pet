@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BrityMessage } from './ingestClient';
+import type { BrityMessage } from './reader';
 
 export interface QueuedMessage {
   msg: BrityMessage;

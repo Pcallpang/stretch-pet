@@ -1,11 +1,6 @@
 import { maskPhoneNumbers } from './masking';
 import { serverUrl } from './config';
-
-export interface BrityMessage {
-  sender: string | null;
-  receivedAt: string;
-  body: string;
-}
+import type { BrityMessage } from './reader';
 
 export type IngestResult =
   | { ok: true; stored: boolean; reason?: string }
