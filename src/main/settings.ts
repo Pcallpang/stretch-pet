@@ -7,6 +7,8 @@ export interface PetSettings {
   autoStart: boolean;
   pinned: boolean;
   character: 'miyo' | 'miyox' | 'deodeumiyo' | 'godmiyo';
+  messengerAlertEnabled: boolean;
+  messengerAlertConsented: boolean;
 }
 
 export const DEFAULT_SETTINGS: PetSettings = {
@@ -16,6 +18,8 @@ export const DEFAULT_SETTINGS: PetSettings = {
   autoStart: false,
   pinned: false,
   character: 'miyox',
+  messengerAlertEnabled: false,
+  messengerAlertConsented: false,
 };
 
 export function clampSettings(settings: Partial<PetSettings>): PetSettings {
@@ -33,6 +37,10 @@ export function clampSettings(settings: Partial<PetSettings>): PetSettings {
     soundEnabled: typeof settings.soundEnabled === 'boolean' ? settings.soundEnabled : DEFAULT_SETTINGS.soundEnabled,
     autoStart: typeof settings.autoStart === 'boolean' ? settings.autoStart : DEFAULT_SETTINGS.autoStart,
     pinned: typeof settings.pinned === 'boolean' ? settings.pinned : DEFAULT_SETTINGS.pinned,
+    messengerAlertEnabled:
+      typeof settings.messengerAlertEnabled === 'boolean' ? settings.messengerAlertEnabled : DEFAULT_SETTINGS.messengerAlertEnabled,
+    messengerAlertConsented:
+      typeof settings.messengerAlertConsented === 'boolean' ? settings.messengerAlertConsented : DEFAULT_SETTINGS.messengerAlertConsented,
   };
 }
 

@@ -20,6 +20,8 @@ describe('clampSettings', () => {
       autoStart: false,
       pinned: false,
       character: 'miyox',
+      messengerAlertEnabled: false,
+      messengerAlertConsented: false,
     });
   });
 
@@ -50,5 +52,23 @@ describe('invalid persisted settings', () => {
     }
     expect(clampSettings({}).character).toBe('miyox');
     expect(clampSettings({ character: '../../oops' } as any).character).toBe('miyox');
+  });
+});
+
+describe('메신저 알리미 필드', () => {
+  it('기본값은 둘 다 꺼짐', () => {
+    const s = clampSettings({});
+    expect(s.messengerAlertEnabled).toBe(false);
+    expect(s.messengerAlertConsented).toBe(false);
+  });
+  it('유효한 boolean 값은 그대로 유지한다', () => {
+    const s = clampSettings({ messengerAlertEnabled: true, messengerAlertConsented: true });
+    expect(s.messengerAlertEnabled).toBe(true);
+    expect(s.messengerAlertConsented).toBe(true);
+  });
+  it('잘못된 타입은 기본값으로 되돌린다', () => {
+    const s = clampSettings({ messengerAlertEnabled: 'yes' as any, messengerAlertConsented: 1 as any });
+    expect(s.messengerAlertEnabled).toBe(false);
+    expect(s.messengerAlertConsented).toBe(false);
   });
 });
