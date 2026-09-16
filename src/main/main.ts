@@ -191,6 +191,10 @@ app.whenReady().then(() => {
         loginInProgress = true;
         try {
           await brityLogin();
+          // 강제 종료나 크래시로 이전 세션의 못 보낸 쪽지가 큐에 남아 있을 수 있다 —
+          // 그대로 두면 같은 PC에 새로 로그인한 계정 플래너로 올라간다. 로그아웃과
+          // 동일한 절충으로, 새 로그인이 완료되면 이전 세션의 큐를 비운다.
+          saveQueueFile([]);
           syncMessengerAlertRunning();
           refreshTray();
         } catch (e) {
