@@ -1,21 +1,10 @@
 import { Tray, Menu, app, nativeImage } from 'electron';
 import * as path from 'path';
 import { getSettings, setSettings } from './settings';
-import { loadToken } from './brity/auth';
 
 interface TrayCallbacks {
   onQuit: () => void;
   onFocusMinutesChange: (minutes: number) => void;
-  onMessengerAlertLogin: () => void;
-  onMessengerAlertLogout: () => void;
-  onMessengerAlertToggle: (enabled: boolean) => void;
-  onClearUnread: () => void;
-  /**
-   * 개발용 테스트 쪽지 트리거. 실제 BrityReader 구현에는 없는 기능이라 선택 사항이며,
-   * 넘겨준 경우에만 트레이 메뉴에 "테스트 쪽지 보내기 (개발용)" 항목이 나타난다.
-   */
-  onTriggerTestMessage?: () => void;
-  getUnreadCount: () => number;
 }
 
 let tray: Tray | null = null;
@@ -92,30 +81,8 @@ function rebuildMenu(callbacks: TrayCallbacks): void {
       },
     },
     { type: 'separator' },
-    {
-      label: loadToken() ? '미요플래너 로그아웃' : '미요플래너 로그인',
-      click: loadToken() ? callbacks.onMessengerAlertLogout : callbacks.onMessengerAlertLogin,
-    },
-    {
-      label: settings.messengerAlertEnabled
-        ? `메신저 알리미: 켜짐${callbacks.getUnreadCount() > 0 ? ` (확인 대기 ${callbacks.getUnreadCount()}건)` : ''}`
-        : '메신저 알리미: 꺼짐',
-      type: 'checkbox',
-      checked: settings.messengerAlertEnabled,
-      enabled: Boolean(loadToken()),
-      click: (menuItem) => callbacks.onMessengerAlertToggle(menuItem.checked),
-    },
-    ...(callbacks.getUnreadCount() > 0
-      ? [{ label: '확인 대기 건수 지우기', click: callbacks.onClearUnread }]
-      : []),
-    ...(settings.messengerAlertEnabled && callbacks.onTriggerTestMessage
-      ? [{ label: '테스트 쪽지 보내기 (개발용)', click: callbacks.onTriggerTestMessage }]
-      : []),
-    { type: 'separator' },
     { label: '종료', click: callbacks.onQuit },
   ]);
 
-  const unread = callbacks.getUnreadCount();
-  tray.setToolTip(unread > 0 ? `스트레칭펫 · 확인 대기 ${unread}건` : '스트레칭펫');
   tray.setContextMenu(menu);
 }

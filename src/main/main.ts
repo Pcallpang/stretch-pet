@@ -1,4 +1,5 @@
 import { app, BrowserWindow, screen, ipcMain, Menu, dialog } from 'electron';
+import type { MenuItemConstructorOptions } from 'electron';
 import * as path from 'path';
 import { TimerScheduler, minutesToMs } from './timerScheduler';
 import { getSettings, setSettings } from './settings';
@@ -83,6 +84,106 @@ function syncMessengerAlertRunning(): void {
   } else {
     messengerAlertService.stop();
   }
+}
+
+async function handleMessengerAlertLogin(): Promise<void> {
+  // 두 번 누르면 루프백 서버·브라우저 탭이 두 개 열리고, 먼저 연 쪽이
+  // 60초 뒤 "로그인 시간 초과" 오류창을 띄운다 — 진행 중이면 무시한다.
+  if (loginInProgress) {
+    dialog.showMessageBox({
+      type: 'info',
+      title: '로그인 진행 중',
+      message: '이미 로그인 창이 열려 있습니다. 브라우저에서 로그인을 마쳐 주세요.',
+    }).catch(() => { /* 안내창 실패는 무시 */ });
+    return;
+  }
+  loginInProgress = true;
+  try {
+    await brityLogin();
+    // 강제 종료나 크래시로 이전 세션의 못 보낸 쪽지가 큐에 남아 있을 수 있다 —
+    // 그대로 두면 같은 PC에 새로 로그인한 계정 플래너로 올라간다. 로그아웃과
+    // 동일한 절충으로, 새 로그인이 완료되면 이전 세션의 큐를 비운다.
+    saveQueueFile([]);
+    syncMessengerAlertRunning();
+  } catch (e) {
+    dialog.showErrorBox('로그인 실패', e instanceof Error ? e.message : '로그인에 실패했습니다.');
+  } finally {
+    loginInProgress = false;
+  }
+}
+
+function handleMessengerAlertLogout(): void {
+  clearToken();
+  setSettings({ messengerAlertEnabled: false });
+  // 아직 못 보낸 쪽지를 남겨두면, 같은 PC에 다른 선생님 계정이 로그인했을 때
+  // 이전 사용자의 쪽지가 새 계정 플래너로 올라갈 수 있다 — 로그아웃 시 비운다.
+  saveQueueFile([]);
+  syncMessengerAlertRunning();
+}
+
+async function handleMessengerAlertToggle(nextEnabled: boolean): Promise<void> {
+  try {
+    if (nextEnabled && !loadToken()) {
+      dialog.showErrorBox('로그인이 필요합니다', '먼저 미요플래너 계정으로 로그인해 주세요.');
+      return;
+    }
+    if (nextEnabled && !getSettings().messengerAlertConsented) {
+      const { response } = await dialog.showMessageBox({
+        type: 'question',
+        buttons: ['취소', '동의하고 켜기'],
+        defaultId: 1,
+        cancelId: 0,
+        title: '메신저 알리미 켜기',
+        message: '브리티 쪽지 내용이 요약을 위해 외부 AI(Gemini)로 전송됩니다. 계속할까요?',
+      });
+      if (response !== 1) return;
+      setSettings({ messengerAlertConsented: true });
+    }
+    setSettings({ messengerAlertEnabled: nextEnabled });
+    syncMessengerAlertRunning();
+  } catch (e) {
+    // 메뉴 클릭에서 시작된 비동기 흐름이라 여기서 잡지 않으면
+    // 처리되지 않은 프라미스 거부가 된다.
+    dialog.showErrorBox('메신저 알리미 설정 실패', e instanceof Error ? e.message : '설정을 바꾸지 못했습니다.');
+  }
+}
+
+function handleClearUnread(): void {
+  messengerAlertService.resetUnreadCount();
+}
+
+/**
+ * 펫 오른쪽 클릭 메뉴에 넣을 메신저 알리미 항목들. 트레이 아이콘 메뉴에는 넣지
+ * 않는다 — 사용자가 캐릭터 오른쪽 클릭 메뉴만으로 충분히 찾을 수 있어, 트레이까지
+ * 이중으로 보여주면 오히려 번잡하다는 판단.
+ */
+function buildMessengerAlertMenuItems(): MenuItemConstructorOptions[] {
+  const settings = getSettings();
+  const loggedIn = Boolean(loadToken());
+  const unread = messengerAlertService.getUnreadCount();
+  const items: MenuItemConstructorOptions[] = [
+    {
+      label: loggedIn ? '미요플래너 로그아웃' : '미요플래너 로그인',
+      click: loggedIn ? handleMessengerAlertLogout : () => void handleMessengerAlertLogin(),
+    },
+    {
+      label: settings.messengerAlertEnabled
+        ? `메신저 알리미: 켜짐${unread > 0 ? ` (확인 대기 ${unread}건)` : ''}`
+        : '메신저 알리미: 꺼짐',
+      type: 'checkbox',
+      checked: settings.messengerAlertEnabled,
+      enabled: loggedIn,
+      click: (menuItem) => void handleMessengerAlertToggle(menuItem.checked),
+    },
+  ];
+  if (unread > 0) {
+    items.push({ label: '확인 대기 건수 지우기', click: handleClearUnread });
+  }
+  const trigger = testMessageTrigger(brityReader);
+  if (settings.messengerAlertEnabled && trigger) {
+    items.push({ label: '테스트 쪽지 보내기 (개발용)', click: trigger });
+  }
+  return items;
 }
 
 function createWindow(): void {
@@ -176,78 +277,6 @@ app.whenReady().then(() => {
     createTray({
       onQuit: () => app.quit(),
       onFocusMinutesChange: updateFocusMinutes,
-      getUnreadCount: () => messengerAlertService.getUnreadCount(),
-      onMessengerAlertLogin: async () => {
-        // 두 번 누르면 루프백 서버·브라우저 탭이 두 개 열리고, 먼저 연 쪽이
-        // 60초 뒤 "로그인 시간 초과" 오류창을 띄운다 — 진행 중이면 무시한다.
-        if (loginInProgress) {
-          dialog.showMessageBox({
-            type: 'info',
-            title: '로그인 진행 중',
-            message: '이미 로그인 창이 열려 있습니다. 브라우저에서 로그인을 마쳐 주세요.',
-          }).catch(() => { /* 안내창 실패는 무시 */ });
-          return;
-        }
-        loginInProgress = true;
-        try {
-          await brityLogin();
-          // 강제 종료나 크래시로 이전 세션의 못 보낸 쪽지가 큐에 남아 있을 수 있다 —
-          // 그대로 두면 같은 PC에 새로 로그인한 계정 플래너로 올라간다. 로그아웃과
-          // 동일한 절충으로, 새 로그인이 완료되면 이전 세션의 큐를 비운다.
-          saveQueueFile([]);
-          syncMessengerAlertRunning();
-          refreshTray();
-        } catch (e) {
-          dialog.showErrorBox('로그인 실패', e instanceof Error ? e.message : '로그인에 실패했습니다.');
-        } finally {
-          loginInProgress = false;
-        }
-      },
-      onMessengerAlertLogout: () => {
-        clearToken();
-        setSettings({ messengerAlertEnabled: false });
-        // 아직 못 보낸 쪽지를 남겨두면, 같은 PC에 다른 선생님 계정이 로그인했을 때
-        // 이전 사용자의 쪽지가 새 계정 플래너로 올라갈 수 있다 — 로그아웃 시 비운다.
-        saveQueueFile([]);
-        syncMessengerAlertRunning();
-        refreshTray();
-      },
-      onMessengerAlertToggle: async (nextEnabled: boolean) => {
-        try {
-          if (nextEnabled && !loadToken()) {
-            dialog.showErrorBox('로그인이 필요합니다', '먼저 미요플래너 계정으로 로그인해 주세요.');
-            refreshTray();
-            return;
-          }
-          if (nextEnabled && !getSettings().messengerAlertConsented) {
-            const { response } = await dialog.showMessageBox({
-              type: 'question',
-              buttons: ['취소', '동의하고 켜기'],
-              defaultId: 1,
-              cancelId: 0,
-              title: '메신저 알리미 켜기',
-              message: '브리티 쪽지 내용이 요약을 위해 외부 AI(Gemini)로 전송됩니다. 계속할까요?',
-            });
-            if (response !== 1) {
-              refreshTray();
-              return;
-            }
-            setSettings({ messengerAlertConsented: true });
-          }
-          setSettings({ messengerAlertEnabled: nextEnabled });
-          syncMessengerAlertRunning();
-          refreshTray();
-        } catch (e) {
-          // 트레이 클릭에서 시작된 비동기 흐름이라 여기서 잡지 않으면
-          // 처리되지 않은 프라미스 거부가 된다.
-          dialog.showErrorBox('메신저 알리미 설정 실패', e instanceof Error ? e.message : '설정을 바꾸지 못했습니다.');
-        }
-      },
-      onClearUnread: () => {
-        messengerAlertService.resetUnreadCount();
-        refreshTray();
-      },
-      onTriggerTestMessage: testMessageTrigger(brityReader),
     });
   } catch (err) {
     // Tray creation can throw on Windows if the icon image fails to load
@@ -323,6 +352,8 @@ ipcMain.on('show-pet-context-menu', () => {
         mainWindow?.webContents.send('pinned-changed', menuItem.checked);
       },
     },
+    { type: 'separator' },
+    ...buildMessengerAlertMenuItems(),
     { type: 'separator' },
     { label: '종료', click: () => app.quit() },
   ]);
