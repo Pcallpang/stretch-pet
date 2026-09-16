@@ -23,6 +23,11 @@
   "dependencies": {
     "electron-store": "^8.2.0"
   },
+  "//miyoConfig": "배포 중에 빌드로 포함되는 설정값. 데스크톱 클라이언트 ID는 PKCE를 사용하므로 보안 정보가 아니며 커밋해도 안전함.",
+  "miyoConfig": {
+    "serverUrl": "https://miyo-planner.vercel.app",
+    "desktopClientId": "280309938828-1tbv8eqqh1gmfbba51qfg4sig6qchcda.apps.googleusercontent.com"
+  },
   "build": {
     "appId": "com.pcallpang.stretchpet",
     "productName": "StretchPet",
