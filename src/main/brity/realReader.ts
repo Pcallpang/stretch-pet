@@ -18,8 +18,14 @@ function stateFilePath(): string {
 }
 
 function readerScriptPath(): string {
-  // 컴파일 결과 위치(dist/main/brity/realReader.js) 기준 저장소 루트의
-  // resources/brity-reader/reader.py를 가리킨다.
+  // 패키징된 앱에서는 resources/brity-reader가 app.asar 안(가상 파일시스템)이
+  // 아니라 실제 폴더(extraResources)로 복사되므로, 파이썬 자식 프로세스가
+  // 열 수 있는 실제 경로인 process.resourcesPath 기준으로 찾아야 한다.
+  // 개발 중(electron .)에는 app.isPackaged가 false이므로 저장소 루트의
+  // resources 폴더를 그대로 가리킨다.
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'brity-reader', 'reader.py');
+  }
   return path.join(__dirname, '..', '..', '..', 'resources', 'brity-reader', 'reader.py');
 }
 

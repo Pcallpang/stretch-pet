@@ -39,8 +39,13 @@
       "src/renderer/index.html",
       "src/renderer/style.css",
       "assets/**/*",
-      "resources/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "."
+      }
     ],
     "win": {
       "target": "portable",
