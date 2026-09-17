@@ -120,8 +120,11 @@ export function login(): Promise<LoginResult> {
       authUrl.searchParams.set('code_challenge', challenge);
       authUrl.searchParams.set('code_challenge_method', 'S256');
       authUrl.searchParams.set('state', state);
-      authUrl.searchParams.set('access_type', 'offline');
-      authUrl.searchParams.set('prompt', 'consent');
+      // access_type=offline·prompt=consent는 뺐다 — 여기서 받는 구글 토큰은
+      // 신원 확인(누구인지 식별)에만 쓰이고 서버가 저장하지 않으므로(서버의
+      // native-login 라우트 참고) 재발급 토큰이 필요 없다. 강제로 매번 동의
+      // 화면을 띄우지 않으면, 이미 로그인·동의한 사용자는 확인 화면 없이(또는
+      // 버튼 한 번만 누르고) 바로 넘어간다.
       shell.openExternal(authUrl.toString());
     });
   });
