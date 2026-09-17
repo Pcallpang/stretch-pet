@@ -2,4 +2,8 @@
 node_modules/
 dist/
 release/
+release-new/
 release-characters/
+__pycache__/
+*.pyc
+.claude/

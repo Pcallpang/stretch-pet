@@ -8,7 +8,7 @@ import { createTray, refreshTray } from './tray';
 import { clampFocusMinutes, computeMinutesUntilNextStretch } from './nextStretch';
 import { MessengerAlertService } from './brity/messengerAlertService';
 import type { BrityReader } from './brity/reader';
-import { createFakeBrityReader } from './brity/fakeReader';
+import { createRealBrityReader } from './brity/realReader';
 import { sendMessengerAlert } from './brity/ingestClient';
 import { loadQueueFile, saveQueueFile } from './brity/retryQueue';
 import { login as brityLogin, loadToken, clearToken } from './brity/auth';
@@ -35,9 +35,11 @@ let focusDeadline: number | null = null;
 let cooldownDeadline: number | null = null;
 let phase: 'focus' | 'alert' | 'stretch' | 'cooldown' = 'focus';
 
-// 실제 브리티 리더가 준비되면 이 한 줄만 새 구현으로 바꾸면 된다 — 타입은
-// BrityReader로만 다루고, 개발용 테스트 트리거는 아래에서 런타임으로 확인한다.
-const brityReader: BrityReader = createFakeBrityReader();
+// 실제 브리티 리더(Windows 접근성 + pywinauto로 화면을 읽는다. 자세한 동작은
+// resources/brity-reader/reader.py 참고). 타입은 BrityReader로만 다루고,
+// 개발용 테스트 트리거가 있으면(가짜 리더처럼) 아래에서 런타임으로 확인한다 —
+// 실제 리더에는 그 기능이 없으므로 "테스트 쪽지 보내기" 메뉴는 자동으로 안 뜬다.
+const brityReader: BrityReader = createRealBrityReader();
 
 /** 리더가 개발용 테스트 트리거를 제공하면 그 함수를, 아니면 undefined를 준다. */
 function testMessageTrigger(reader: BrityReader): (() => void) | undefined {

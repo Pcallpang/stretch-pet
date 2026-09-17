@@ -39,6 +39,7 @@
       "src/renderer/index.html",
       "src/renderer/style.css",
       "assets/**/*",
+      "resources/**/*",
       "package.json"
     ],
     "win": {
