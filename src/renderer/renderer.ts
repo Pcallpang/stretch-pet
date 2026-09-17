@@ -440,7 +440,9 @@ window.petAPI.onPinnedChanged((next) => {
 });
 window.petAPI.onMessengerAlertNew((count) => {
   if (state !== 'idle' && state !== 'walk' && state !== 'cooldown') return; // alert/stretch 중엔 방해하지 않는다
-  showBubble(count > 1 ? '새로운 대화가 있어요!' : '새로운 쪽지가 있어요!');
+  // count는 "지금까지 확인 안 한 쪽지 총 건수"다 — "쪽지"냐 "대화"냐로 애매하게
+  // 나누지 않고 항상 정확한 건수를 숫자로 보여준다.
+  showBubble(count === 1 ? '새로운 쪽지가 있어요!' : `새로운 쪽지가 ${count}건 있어요!`);
   const token = bubbleToken;
   setTimeout(() => {
     if (bubbleToken === token) hideBubble();
