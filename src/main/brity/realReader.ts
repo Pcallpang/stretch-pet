@@ -17,16 +17,28 @@ function stateFilePath(): string {
   return path.join(app.getPath('userData'), 'brity-seen.json');
 }
 
-function readerScriptPath(): string {
+function readerExePath(): string {
+  // reader.py는 PyInstaller로 미리 reader.exe(폴더 형태, --onedir)로 굳혀
+  // 배포한다 — 사용자 컴퓨터에 파이썬을 따로 설치할 필요가 없게 하기 위해서다.
   // 패키징된 앱에서는 resources/brity-reader가 app.asar 안(가상 파일시스템)이
-  // 아니라 실제 폴더(extraResources)로 복사되므로, 파이썬 자식 프로세스가
-  // 열 수 있는 실제 경로인 process.resourcesPath 기준으로 찾아야 한다.
-  // 개발 중(electron .)에는 app.isPackaged가 false이므로 저장소 루트의
-  // resources 폴더를 그대로 가리킨다.
+  // 아니라 실제 폴더(extraResources)로 복사되므로, 자식 프로세스가 열 수 있는
+  // 실제 경로인 process.resourcesPath 기준으로 찾아야 한다. 개발 중(electron .)
+  // 에는 app.isPackaged가 false이므로 저장소 안의 빌드 결과 폴더를 가리킨다
+  // (npm run build:reader-exe로 미리 빌드해둬야 함).
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'brity-reader', 'reader.py');
+    return path.join(process.resourcesPath, 'brity-reader', 'reader.exe');
   }
-  return path.join(__dirname, '..', '..', '..', 'resources', 'brity-reader', 'reader.py');
+  return path.join(
+    __dirname,
+    '..',
+    '..',
+    '..',
+    'resources',
+    'brity-reader',
+    'dist',
+    'reader',
+    'reader.exe'
+  );
 }
 
 /**
@@ -48,12 +60,10 @@ export function extractCompleteLines(buffer: string): { lines: string[]; remaind
 
 /**
  * 실제 브리티 메신저를 화면 접근성(Windows UI Automation)으로 읽는 리더.
- * 무거운 읽기 로직은 파이썬(pywinauto)으로 만든 `reader.py`가 담당하고,
- * 이 클래스는 그 스크립트를 주기적으로 자식 프로세스로 실행해 결과를 받는
- * 얇은 다리 역할만 한다.
- *
- * `reader.py`는 이 컴퓨터에 파이썬과 pywinauto가 설치돼 있어야 동작한다
- * (README 참고) — 아직 실행 파일 하나로 묶어 배포하지 않는다.
+ * 무거운 읽기 로직은 파이썬(pywinauto)으로 만든 `reader.py`를 PyInstaller로
+ * 미리 굳힌 `reader.exe`가 담당하고, 이 클래스는 그 실행 파일을 주기적으로
+ * 자식 프로세스로 실행해 결과를 받는 얇은 다리 역할만 한다. 사용자 컴퓨터에
+ * 파이썬을 따로 설치할 필요가 없다.
  */
 export function createRealBrityReader(): BrityReader {
   let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -65,7 +75,7 @@ export function createRealBrityReader(): BrityReader {
     if (childRunning) return; // 이전 실행이 아직 안 끝났으면 겹쳐 돌리지 않는다
     childRunning = true;
 
-    const child = spawn('python', [readerScriptPath(), '--state', stateFilePath()], {
+    const child = spawn(readerExePath(), ['--state', stateFilePath()], {
       windowsHide: true,
     });
     currentChild = child;
@@ -97,9 +107,9 @@ export function createRealBrityReader(): BrityReader {
     });
 
     child.on('error', (e) => {
-      // 파이썬이 이 컴퓨터에 없을 때 등 — 매 주기 반복해서 시끄럽지 않게
+      // reader.exe가 없거나 손상됐을 때 등 — 매 주기 반복해서 시끄럽지 않게
       // 여기서만 로그를 남기고 조용히 다음 주기를 기다린다.
-      console.error('[stretch-pet] 브리티 리더 실행 실패(파이썬·pywinauto가 설치돼 있는지 확인 필요):', e.message);
+      console.error('[stretch-pet] 브리티 리더(reader.exe) 실행 실패:', e.message);
       clearTimeout(killTimer);
       childRunning = false;
       if (currentChild === child) currentChild = null;

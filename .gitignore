@@ -7,3 +7,6 @@ release-characters/
 __pycache__/
 *.pyc
 .claude/
+resources/brity-reader/build/
+resources/brity-reader/dist/
+resources/brity-reader/reader.spec

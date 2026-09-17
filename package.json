@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:smoke": "npm run build && node scripts/smoke-test.cjs",
     "slice-sprites": "node scripts/slice-sprites.mjs",
-    "package": "npm run build && electron-builder --win portable"
+    "build:reader-exe": "cd resources/brity-reader && python -m PyInstaller --onedir --name reader --distpath dist --workpath build --specpath . --noconfirm --exclude-module numpy --exclude-module PIL --exclude-module matplotlib --exclude-module pandas reader.py",
+    "package": "npm run build && npm run build:reader-exe && electron-builder --win portable"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -43,8 +44,8 @@
     ],
     "extraResources": [
       {
-        "from": "resources",
-        "to": "."
+        "from": "resources/brity-reader/dist/reader",
+        "to": "brity-reader"
       }
     ],
     "win": {
