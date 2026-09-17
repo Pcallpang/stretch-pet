@@ -41,26 +41,34 @@
    메뉴의 "메신저 알리미: 켜짐" 항목에도 대기 건수가 같이 표시됩니다. 다 확인했으면
    트레이 메뉴의 "확인 대기 건수 지우기"로 0으로 되돌릴 수 있습니다.
 
-### 지금 한계 — 실제 브리티 쪽지는 아직 읽지 않습니다
+### 실제 브리티 쪽지 읽기 — 파이썬 설치가 필요합니다
 
-**중요:** 지금 버전은 브리티 메신저를 실제로 읽어오지 않습니다. 트레이 메뉴의
-"테스트 쪽지 보내기 (개발용)"를 눌러야만 정해진 테스트 문구 하나가 쪽지처럼 발생합니다.
-이건 실제 기능이 완성되기 전까지 알림·전송 흐름 전체(말풍선 표시 → 서버 전송 → 선생님 검토)가
-잘 동작하는지 확인하기 위한 임시 장치입니다.
+이 버전은 실제로 브리티 메신저 창을 읽어옵니다(윈도우 화면 접근성 API 이용). 다만 이
+기능은 **이 컴퓨터에 파이썬(Python)과 `pywinauto`/`pywin32` 라이브러리가 설치돼
+있어야** 동작합니다. 아직 파이썬까지 하나의 설치 파일로 묶어주지는 못했습니다(다음 단계
+숙제).
 
-실제로 브리티 메신저 창을 읽어오는 기능(윈도우 접근성 API를 이용한 방식)은 다음 단계로
-남아 있습니다. 나중에 이 기능을 추가할 때는:
+설치 방법:
 
-- `src/main/brity/reader.ts`에 정의된 `BrityReader` 인터페이스(쪽지가 오면 `start`로 등록한
-  콜백을 호출하고, `stop`으로 멈추는 규격)를 구현하는 새 클래스를 만들고,
-- `src/main/main.ts`에서 두 줄만 바꾸면 됩니다 — 맨 위의
-  `import { createFakeBrityReader } from './brity/fakeReader';` 줄을 새 구현을 가져오는
-  import으로, 그리고 지금 쓰고 있는 `createFakeBrityReader()` 호출을 그 새 클래스로
-  바꿔치기하면 됩니다.
+1. [python.org](https://www.python.org/downloads/)에서 파이썬을 설치합니다. 설치 화면에서
+   **"Add python.exe to PATH"** 체크박스를 반드시 켜세요.
+2. 명령 프롬프트(cmd)나 PowerShell에서 아래 명령을 실행합니다.
 
-그 외 코드(말풍선 표시, 서버 전송, 재시도 큐 등)는 이 인터페이스만 보고 동작하므로 **전혀
-손댈 필요가 없습니다.** "테스트 쪽지 보내기 (개발용)" 메뉴 항목은 리더가
-`triggerTestMessage()`를 가진 경우에만 나타나므로, 실제 리더로 바꾸면 자동으로 사라집니다.
+   ```
+   pip install pywinauto pywin32
+   ```
+
+3. 이제 "메신저 알리미"를 켜두면, 브리티 메신저를 직접 쓰고 있지 않은 동안(자리비움
+   30초 이상 & 브리티 창에 포커스가 없을 때)에만 20초마다 안 읽은 대화방이 있는지
+   확인합니다. 새 대화가 있으면 자동으로 열어서 마지막 메시지를 읽고, 방금 자기가 연
+   창만 스스로 닫습니다. 사용자가 직접 열어둔 창은 절대 건드리지 않습니다.
+
+파이썬이 설치돼 있지 않으면 오류 로그만 남고 조용히 다음 주기를 기다립니다(캐릭터가
+멈추거나 다른 기능에 영향을 주지는 않습니다).
+
+**아직 안 되는 것:** "워크스페이스" 영역은 아직 읽지 않습니다(브리티의 "대화" 탭만
+읽습니다). "테스트 쪽지 보내기 (개발용)" 메뉴는 이 실제 리더에는 없습니다(실제 쪽지가
+오는지로 확인).
 
 ---
 
@@ -122,20 +130,32 @@
 | `npm run slice-sprites` | 캐릭터 스프라이트 이미지 슬라이싱 스크립트 |
 | `npm run package` | 빌드 후 electron-builder로 윈도우용 포터블 실행파일 생성 |
 
-### 브리티 실제 읽기 기능을 추가하려면
+### 브리티 실제 읽기 구현 (`realReader.ts` + `reader.py`)
 
-1. `src/main/brity/reader.ts`의 `BrityReader` 인터페이스(`start(onMessage)` / `stop()`)를
-   구현하는 새 클래스를 작성합니다. 윈도우 접근성(UI Automation) API로 브리티 메신저 창을
-   읽는 방식을 참고할 수 있습니다 (`src/main/brity/fakeReader.ts`가 지금 이 인터페이스를
-   흉내만 내는 자리표시자 구현입니다).
-2. `src/main/main.ts`에서 두 줄을 바꿉니다: 파일 맨 위의
-   `import { createFakeBrityReader } from './brity/fakeReader';` import 줄과,
-   `const brityReader: BrityReader = createFakeBrityReader();` 호출 줄을 각각 새 구현으로
-   바꿉니다.
-3. 그 외 파일(`ingestClient.ts`, `retryQueue.ts`, `messengerAlertService.ts`, `tray.ts` 등)은
-   전부 `BrityReader` 인터페이스와 `BrityMessage` 타입만 보고 동작하므로 수정할 필요가
-   없습니다. `main.ts`의 `brityReader` 변수 타입도 `BrityReader`이고, 개발용
-   `triggerTestMessage()`는 런타임에 있는지 확인해서 있을 때만 트레이에 연결하므로,
-   `BrityReader`만 구현한 실제 리더를 넣어도 컴파일·실행이 그대로 됩니다.
-4. 구현체는 `start()`/`stop()`이 반복 호출돼도 안전해야 합니다(감시기 중복 생성 금지).
-   서비스 쪽에서도 중복 호출을 막지만, 인터페이스 규약으로도 요구합니다.
+`src/main/brity/realReader.ts`가 `BrityReader` 인터페이스(`start(onMessage)` / `stop()`)의
+실제 구현입니다. 무거운 화면 읽기 로직은 파이썬으로 만든
+`resources/brity-reader/reader.py`가 담당하고, `realReader.ts`는 20초마다 그 스크립트를
+자식 프로세스(`child_process.spawn`)로 한 번씩 실행해서 표준출력으로 나오는 JSON 한 줄짜리
+메시지를 받아 콜백으로 넘기는 얇은 다리 역할만 합니다.
+
+- `reader.py`는 `pywinauto`(윈도우 UI Automation을 파이썬에서 쓰기 쉽게 감싼 라이브러리)로
+  브리티 메신저 창의 대화 목록을 읽습니다. 안 읽은 대화방(이전에 저장해둔 "본 목록"에 없는
+  항목)만 골라 더블클릭으로 열고, 새로 뜬 창에서 마지막 메시지를 읽은 뒤 자기가 연 창만
+  닫습니다.
+- 자리비움 30초 미만이거나 브리티 창에 포커스가 있으면(=사용자가 직접 쓰고 있으면)
+  아무것도 하지 않고 다음 주기를 기다립니다.
+- "본 목록"은 `app.getPath('userData')/brity-seen.json`에 저장됩니다.
+- 패키징된 앱에서는 `reader.py`가 `app.asar`(전체 코드를 하나로 압축한 가상 파일) **밖의**
+  `resources/brity-reader/` 실제 폴더에 있어야 파이썬이 열 수 있습니다. 그래서
+  `package.json`의 `build.extraResources`로 별도 복사하고, `realReader.ts`는 패키징
+  여부(`app.isPackaged`)에 따라 `process.resourcesPath` 기준으로 경로를 찾습니다.
+  (`build.files`에 그냥 넣으면 asar 안에 갇혀 조용히 실패하니 주의.)
+- 실행하려면 이 컴퓨터에 파이썬 + `pywinauto`/`pywin32`가 설치돼 있어야 합니다
+  (`resources/brity-reader/requirements.txt` 참고). 아직 파이썬까지 하나의 실행 파일로
+  묶어 배포하지는 않았습니다.
+- 남은 일: "워크스페이스" 영역 읽기(현재는 "대화" 탭만), 파이썬을 exe로 묶어 별도 설치
+  없이 배포하기.
+
+그 외 파일(`ingestClient.ts`, `retryQueue.ts`, `messengerAlertService.ts`, `tray.ts` 등)은
+전부 `BrityReader` 인터페이스와 `BrityMessage` 타입만 보고 동작하므로 이 구현으로 바꾸는
+과정에서 손댈 필요가 없었습니다 — 설계했던 인터페이스 경계가 실제로 그대로 들어맞았습니다.
